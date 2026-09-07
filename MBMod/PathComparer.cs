@@ -30,9 +30,13 @@ public static class PathComparer
   private static float lastRecordTime;
   private static float runStartRealtime;
 
-  private const float RecordInterval = 0.1f; // seconds between recorded samples
-  private const int BackwardSearchWindow = 20; // samples to look behind the last match
-  private const int ForwardSearchWindow = 200; // samples to look ahead of the last match
+  // Recording every frame (rather than throttling) matters here: the ghost
+  // linearly interpolates between consecutive samples, and a coarse interval
+  // visibly cuts corners through non-linear motion like jump arcs. File size
+  // stays trivial (a few hundred KB even for a multi-minute run) at 60fps.
+  private const float RecordInterval = 0f;
+  private const int BackwardSearchWindow = 120; // samples to look behind the last match (~2s at 60fps)
+  private const int ForwardSearchWindow = 1200; // samples to look ahead of the last match (~20s at 60fps)
 
   /// <summary>Seconds behind (positive) or ahead (negative) of the best run's pace at the closest matching position. Zero if no best run is loaded yet.</summary>
   public static float DeltaSeconds { get; private set; }
@@ -99,8 +103,7 @@ public static class PathComparer
 
   private static string PathFileFor(int level)
   {
-    // return Path.Combine(Application.persistentDataPath, "bestpath_level" + level + ".dat");
-    return "bestpath_level" + level + ".dat";
+    return Path.Combine(Application.persistentDataPath, "bestpath_level" + level + ".dat");
   }
 
   /// <summary>Call when a run starts (e.g. from the same code that currently starts the split timer).</summary>
