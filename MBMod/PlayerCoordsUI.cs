@@ -41,14 +41,6 @@ public class PlayerCoordsUI : MonoBehaviour
     _bgTexture.Apply();
   }
 
-  private void FixedUpdate()
-  {
-    if (playerTransform == null)
-      return;
-    PathComparer.Tick(playerTransform.position);
-    UpdateGhost();
-  }
-
   private void Update()
   {
     if (playerTransform == null)
