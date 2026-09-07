@@ -30,6 +30,7 @@ public class MBMod : BaseUnityPlugin
       )
     )
     {
+      Log.LogInfo("[PathComparer] WASD detected, starting run on level " + Application.loadedLevel);
       PathComparer.StartRun(Application.loadedLevel);
     }
 
@@ -146,13 +147,13 @@ public class MBMod : BaseUnityPlugin
 
     var harmony = new Harmony("nyix.mathbreakers.a");
 
-    var uiObj2 = new GameObject("PlayerCoordsUI");
+var uiObj2 = new GameObject("PlayerCoordsUI");
     UnityEngine.Object.DontDestroyOnLoad(uiObj2);
     var ui2 = uiObj2.AddComponent<PlayerCoordsUI>();
     harmony.PatchAll();
     Log.LogInfo("Mathbreakers Save Test loaded!");
   }
-}
+  }
 
 [HarmonyPatch(typeof(EndLevelTrigger), "OnTriggerEnter")]
 public static class EndLevelTrigger_OnTriggerEnter_Patch
@@ -162,6 +163,10 @@ public static class EndLevelTrigger_OnTriggerEnter_Patch
   {
     if (__instance != null)
     {
+      MBMod.Log.LogInfo(
+        "[PathComparer] EndLevelTrigger fired. timeout=" + ___timeout + " otherTag=" + other.tag
+      );
+
       // Replicate the original trigger condition
       if (___timeout < 0f && other.tag == "Player")
       {
@@ -169,6 +174,7 @@ public static class EndLevelTrigger_OnTriggerEnter_Patch
         int currentLevel = Application.loadedLevel;
         int nextLevel = currentLevel + 1;
 
+        MBMod.Log.LogInfo("[PathComparer] Calling EndRun(true) for level " + currentLevel);
         // Call your custom method
         PathComparer.EndRun(true);
       }

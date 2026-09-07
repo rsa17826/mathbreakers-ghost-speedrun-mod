@@ -64,21 +64,22 @@ public static class PathComparer
     lastRecordTime = float.NegativeInfinity;
     runStartRealtime = Time.realtimeSinceStartup;
     bestRun = LoadBestPath(level);
+    MBMod.Log.LogInfo(
+      "[PathComparer] StartRun level=" + level + " bestRunLoaded=" + (bestRun != null ? bestRun.Count.ToString() : "none")
+    );
   }
 
   /// <summary>Call every frame with the player's current position; does nothing if no run is active. Elapsed time is measured internally from StartRun.</summary>
   public static void Tick(Vector3 position)
   {
-    if (!IsRunning)
-      return;
+    if (!IsRunning) return;
     Sample(Time.realtimeSinceStartup - runStartRealtime, position);
   }
 
   /// <summary>Call every frame (e.g. from Update) with seconds elapsed since the run/split started and the player's current position.</summary>
   public static void Sample(float elapsed, Vector3 position)
   {
-    if (currentLevel < 0)
-      return;
+    if (currentLevel < 0) return;
 
     if (elapsed - lastRecordTime >= RecordInterval)
     {
@@ -95,6 +96,9 @@ public static class PathComparer
   /// <summary>Call when a run ends. Pass completed=true only if the level was actually cleared, so aborted runs never overwrite the best path.</summary>
   public static void EndRun(bool completed)
   {
+    MBMod.Log.LogInfo(
+      "[PathComparer] EndRun completed=" + completed + " sampleCount=" + currentRun.Count + " level=" + currentLevel
+    );
     if (completed && currentRun.Count > 0)
     {
       SaveIfBest(currentLevel, currentRun);
@@ -131,9 +135,13 @@ public static class PathComparer
     var existing = LoadBestPath(level);
     if (existing != null && existing.Count > 0 && existing[existing.Count - 1].Time <= thisRunTime)
     {
+      MBMod.Log.LogInfo(
+        "[PathComparer] Not saving: existing best (" + existing[existing.Count - 1].Time + "s) <= this run (" + thisRunTime + "s)"
+      );
       return; // existing best is still equal or faster
     }
     SavePath(level, run);
+    MBMod.Log.LogInfo("[PathComparer] Saved new best to " + PathFileFor(level) + " (" + thisRunTime + "s, " + run.Count + " samples)");
   }
 
   private static void SavePath(int level, List<PathSample> run)
@@ -154,8 +162,7 @@ public static class PathComparer
   private static List<PathSample> LoadBestPath(int level)
   {
     string path = PathFileFor(level);
-    if (!File.Exists(path))
-      return null;
+    if (!File.Exists(path)) return null;
 
     using (var reader = new BinaryReader(File.OpenRead(path)))
     {
