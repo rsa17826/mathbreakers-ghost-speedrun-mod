@@ -1,3 +1,4 @@
+using System.IO;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
@@ -36,7 +37,7 @@ public class MBMod : BaseUnityPlugin
     if (
       PathComparer.IsRunning
       && (
-        Input.GetKeyDown(KeyCode.ESC)
+        Input.GetKeyDown(KeyCode.Escape)
       )
     )
     {
@@ -187,6 +188,7 @@ public static class EndLevelTrigger_OnTriggerEnter_Patch
         MBMod.Log.LogInfo("[PathComparer] Calling EndRun(true) for level " + currentLevel);
         // Call your custom method
         PathComparer.EndRun(true);
+        File.Create("level_cleared.txt");
       }
     }
   }
