@@ -147,13 +147,13 @@ public class MBMod : BaseUnityPlugin
 
     var harmony = new Harmony("nyix.mathbreakers.a");
 
-var uiObj2 = new GameObject("PlayerCoordsUI");
+    var uiObj2 = new GameObject("PlayerCoordsUI");
     UnityEngine.Object.DontDestroyOnLoad(uiObj2);
     var ui2 = uiObj2.AddComponent<PlayerCoordsUI>();
     harmony.PatchAll();
     Log.LogInfo("Mathbreakers Save Test loaded!");
   }
-  }
+}
 
 [HarmonyPatch(typeof(EndLevelTrigger), "OnTriggerEnter")]
 public static class EndLevelTrigger_OnTriggerEnter_Patch
