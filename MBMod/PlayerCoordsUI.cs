@@ -43,13 +43,16 @@ public class PlayerCoordsUI : MonoBehaviour
 
   private void FixedUpdate()
   {
-    if (playerTransform == null) return;
+    if (playerTransform == null)
+      return;
     PathComparer.Tick(playerTransform.position);
     UpdateGhost();
   }
+
   private void Update()
   {
-    if (playerTransform == null) return;
+    if (playerTransform == null)
+      return;
     PathComparer.Tick(playerTransform.position);
     UpdateGhost();
   }
@@ -89,7 +92,11 @@ public class PlayerCoordsUI : MonoBehaviour
   // a visual marker.
   private GameObject CreateGhost(GameObject player)
   {
-    var clone = (GameObject)Instantiate(player, player.transform.position, player.transform.rotation);
+    var clone = (GameObject)Instantiate(
+      player,
+      player.transform.position,
+      player.transform.rotation
+    );
     clone.name = "BestRunGhost";
     clone.tag = "Untagged";
 
