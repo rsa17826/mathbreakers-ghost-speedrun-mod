@@ -15,7 +15,6 @@ public class PlayerCoordsUI : MonoBehaviour
   private static readonly Color BehindColor = Color.red;
   private Texture2D _bgTexture;
 
-  private readonly PathComparer pathComparer = new PathComparer();
   private float runStartRealtime = -1f;
 
   /// <summary>
@@ -25,17 +24,19 @@ public class PlayerCoordsUI : MonoBehaviour
   public void OnRunStarted(int level)
   {
     runStartRealtime = Time.realtimeSinceStartup;
-    pathComparer.StartRun(level);
+    PathComparer.StartRun(level);
   }
 
   /// <summary>
   /// Call this from wherever the run/split actually ends, passing whether
   /// the level was genuinely cleared (vs quit/reset) so a partial run never
-  /// overwrites the saved best path.
+  /// overwrites the saved best path. Class1.cs's EndLevelTrigger patch
+  /// already calls PathComparer.EndRun(true) directly on level clear, so
+  /// this is only needed if you also want to signal aborted/reset runs.
   /// </summary>
   public void OnRunEnded(bool completed)
   {
-    pathComparer.EndRun(completed);
+    PathComparer.EndRun(completed);
     runStartRealtime = -1f;
   }
 
@@ -52,10 +53,11 @@ public class PlayerCoordsUI : MonoBehaviour
 
   private void Update()
   {
-    if (runStartRealtime < 0f || playerTransform == null) return;
+    if (runStartRealtime < 0f || playerTransform == null)
+      return;
 
     float elapsed = Time.realtimeSinceStartup - runStartRealtime;
-    pathComparer.Sample(elapsed, playerTransform.position);
+    PathComparer.Sample(elapsed, playerTransform.position);
   }
 
   private void OnGUI()
@@ -79,9 +81,9 @@ public class PlayerCoordsUI : MonoBehaviour
       string coordText = string.Format("X: {0:F1}  Y: {1:F1}  Z: {2:F1}", pos.x, pos.y, pos.z);
       DrawText(new Rect(_windowRect.x + 10, _windowRect.y + 32, 220, 20), coordText);
 
-      if (pathComparer.HasComparison)
+      if (PathComparer.HasComparison)
       {
-        float delta = pathComparer.DeltaSeconds;
+        float delta = PathComparer.DeltaSeconds;
         string sign = delta >= 0 ? "+" : "";
         string deltaText = string.Format("Best Run: {0}{1:F2}s", sign, delta);
         Color deltaColor = delta <= 0 ? AheadColor : BehindColor;

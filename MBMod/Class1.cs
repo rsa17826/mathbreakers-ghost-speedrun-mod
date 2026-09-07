@@ -133,11 +133,10 @@ public class MBMod : BaseUnityPlugin
 
     var harmony = new Harmony("nyix.mathbreakers.a");
 
-
     harmony.PatchAll();
     Log.LogInfo("Mathbreakers Save Test loaded!");
   }
-  }
+}
 
 [HarmonyPatch(typeof(EndLevelTrigger), "OnTriggerEnter")]
 public static class EndLevelTrigger_OnTriggerEnter_Patch

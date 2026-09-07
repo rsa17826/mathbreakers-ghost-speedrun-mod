@@ -9,8 +9,13 @@ using UnityEngine;
 /// "seconds ahead/behind" delta based on the closest point on the best path
 /// to the player's current position (not just elapsed-time lookup), so
 /// deltas stay meaningful even if the two runs take slightly different lines.
+///
+/// Static because there is exactly one active run at a time and this is
+/// called both from PlayerCoordsUI (per-frame sampling/display) and from
+/// the Harmony patch in Class1.cs (run-end signal), which have no shared
+/// instance to call through.
 /// </summary>
-public class PathComparer
+public static class PathComparer
 {
   public struct PathSample
   {
@@ -18,27 +23,32 @@ public class PathComparer
     public Vector3 Position;
   }
 
-  private readonly List<PathSample> currentRun = new List<PathSample>();
-  private List<PathSample> bestRun;
-  private int bestRunSearchIndex;
-  private int currentLevel = -1;
-  private float lastRecordTime;
+  private static readonly List<PathSample> currentRun = new List<PathSample>();
+  private static List<PathSample> bestRun;
+  private static int bestRunSearchIndex;
+  private static int currentLevel = -1;
+  private static float lastRecordTime;
 
   private const float RecordInterval = 0.1f; // seconds between recorded samples
   private const int BackwardSearchWindow = 20; // samples to look behind the last match
   private const int ForwardSearchWindow = 200; // samples to look ahead of the last match
 
   /// <summary>Seconds behind (positive) or ahead (negative) of the best run's pace at the closest matching position. Zero if no best run is loaded yet.</summary>
-  public float DeltaSeconds { get; private set; }
+  public static float DeltaSeconds { get; private set; }
 
   /// <summary>True once a best-run path has been loaded for the active level, i.e. DeltaSeconds is meaningful.</summary>
-  public bool HasComparison => bestRun != null && bestRun.Count > 0;
+  public static bool HasComparison
+  {
+    get { return bestRun != null && bestRun.Count > 0; }
+  }
 
-  private static string PathFileFor(int level) =>
-    Path.Combine(Application.persistentDataPath, $"bestpath_level{level}.dat");
+  private static string PathFileFor(int level)
+  {
+    return Path.Combine(Application.persistentDataPath, "bestpath_level" + level + ".dat");
+  }
 
   /// <summary>Call when a run starts (e.g. from the same code that currently starts the split timer).</summary>
-  public void StartRun(int level)
+  public static void StartRun(int level)
   {
     currentLevel = level;
     currentRun.Clear();
@@ -49,9 +59,10 @@ public class PathComparer
   }
 
   /// <summary>Call every frame (e.g. from Update) with seconds elapsed since the run/split started and the player's current position.</summary>
-  public void Sample(float elapsed, Vector3 position)
+  public static void Sample(float elapsed, Vector3 position)
   {
-    if (currentLevel < 0) return;
+    if (currentLevel < 0)
+      return;
 
     if (elapsed - lastRecordTime >= RecordInterval)
     {
@@ -66,7 +77,7 @@ public class PathComparer
   }
 
   /// <summary>Call when a run ends. Pass completed=true only if the level was actually cleared, so aborted runs never overwrite the best path.</summary>
-  public void EndRun(bool completed)
+  public static void EndRun(bool completed)
   {
     if (completed && currentRun.Count > 0)
     {
@@ -76,7 +87,7 @@ public class PathComparer
     bestRun = null;
   }
 
-  private void UpdateDelta(float elapsed, Vector3 position)
+  private static void UpdateDelta(float elapsed, Vector3 position)
   {
     int searchStart = Math.Max(0, bestRunSearchIndex - BackwardSearchWindow);
     int searchEnd = Math.Min(bestRun.Count - 1, bestRunSearchIndex + ForwardSearchWindow);
@@ -98,7 +109,7 @@ public class PathComparer
     DeltaSeconds = elapsed - bestRun[bestIndex].Time;
   }
 
-  private void SaveIfBest(int level, List<PathSample> run)
+  private static void SaveIfBest(int level, List<PathSample> run)
   {
     float thisRunTime = run[run.Count - 1].Time;
     var existing = LoadBestPath(level);
@@ -111,33 +122,38 @@ public class PathComparer
 
   private static void SavePath(int level, List<PathSample> run)
   {
-    using var writer = new BinaryWriter(File.Create(PathFileFor(level)));
-    writer.Write(run.Count);
-    foreach (var sample in run)
+    using (var writer = new BinaryWriter(File.Create(PathFileFor(level))))
     {
-      writer.Write(sample.Time);
-      writer.Write(sample.Position.x);
-      writer.Write(sample.Position.y);
-      writer.Write(sample.Position.z);
+      writer.Write(run.Count);
+      foreach (var sample in run)
+      {
+        writer.Write(sample.Time);
+        writer.Write(sample.Position.x);
+        writer.Write(sample.Position.y);
+        writer.Write(sample.Position.z);
+      }
     }
   }
 
   private static List<PathSample> LoadBestPath(int level)
   {
     string path = PathFileFor(level);
-    if (!File.Exists(path)) return null;
+    if (!File.Exists(path))
+      return null;
 
-    using var reader = new BinaryReader(File.OpenRead(path));
-    int count = reader.ReadInt32();
-    var result = new List<PathSample>(count);
-    for (int i = 0; i < count; i++)
+    using (var reader = new BinaryReader(File.OpenRead(path)))
     {
-      float t = reader.ReadSingle();
-      float x = reader.ReadSingle();
-      float y = reader.ReadSingle();
-      float z = reader.ReadSingle();
-      result.Add(new PathSample { Time = t, Position = new Vector3(x, y, z) });
+      int count = reader.ReadInt32();
+      var result = new List<PathSample>(count);
+      for (int i = 0; i < count; i++)
+      {
+        float t = reader.ReadSingle();
+        float x = reader.ReadSingle();
+        float y = reader.ReadSingle();
+        float z = reader.ReadSingle();
+        result.Add(new PathSample { Time = t, Position = new Vector3(x, y, z) });
+      }
+      return result;
     }
-    return result;
   }
 }
