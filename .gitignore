@@ -13,3 +13,4 @@ mathbreakers/*
 *.zip
 **/node_modules
 node_modules
+!bestpath_level*
