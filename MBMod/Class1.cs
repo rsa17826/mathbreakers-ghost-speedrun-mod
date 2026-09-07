@@ -1,6 +1,6 @@
-using System.IO;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using BepInEx;
@@ -34,12 +34,7 @@ public class MBMod : BaseUnityPlugin
       Log.LogInfo("[PathComparer] WASD detected, starting run on level " + Application.loadedLevel);
       PathComparer.StartRun(Application.loadedLevel);
     }
-    if (
-      PathComparer.IsRunning
-      && (
-        Input.GetKeyDown(KeyCode.Escape)
-      )
-    )
+    if (PathComparer.IsRunning && (Input.GetKeyDown(KeyCode.Escape)))
     {
       Log.LogInfo("[PathComparer] ESC detected, stopping run on level " + Application.loadedLevel);
       PathComparer.EndRun(false);

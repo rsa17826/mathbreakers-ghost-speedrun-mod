@@ -49,6 +49,54 @@ public static class PathComparer
     get { return bestRun != null && bestRun.Count > 0; }
   }
 
+  /// <summary>Seconds since the current run started, or 0 if no run is active.</summary>
+  public static float ElapsedTime
+  {
+    get { return IsRunning ? Time.realtimeSinceStartup - runStartRealtime : 0f; }
+  }
+
+  /// <summary>
+  /// Looks up (via linear interpolation between the two surrounding samples)
+  /// where the best run was at the given elapsed time. Returns false if
+  /// there's no best run loaded. Clamps to the first/last sample outside
+  /// the recorded range.
+  /// </summary>
+  public static bool TryGetBestPosition(float elapsed, out Vector3 position)
+  {
+    position = Vector3.zero;
+    if (bestRun == null || bestRun.Count == 0)
+      return false;
+
+    if (elapsed <= bestRun[0].Time)
+    {
+      position = bestRun[0].Position;
+      return true;
+    }
+
+    var last = bestRun[bestRun.Count - 1];
+    if (elapsed >= last.Time)
+    {
+      position = last.Position;
+      return true;
+    }
+
+    for (int i = 1; i < bestRun.Count; i++)
+    {
+      if (bestRun[i].Time >= elapsed)
+      {
+        var prev = bestRun[i - 1];
+        var next = bestRun[i];
+        float span = next.Time - prev.Time;
+        float t = span > 0f ? (elapsed - prev.Time) / span : 0f;
+        position = Vector3.Lerp(prev.Position, next.Position, t);
+        return true;
+      }
+    }
+
+    position = last.Position;
+    return true;
+  }
+
   private static string PathFileFor(int level)
   {
     // return Path.Combine(Application.persistentDataPath, "bestpath_level" + level + ".dat");

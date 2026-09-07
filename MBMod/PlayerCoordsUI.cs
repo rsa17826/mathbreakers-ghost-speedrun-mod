@@ -41,11 +41,99 @@ public class PlayerCoordsUI : MonoBehaviour
     _bgTexture.Apply();
   }
 
+  private void FixedUpdate()
+  {
+    if (playerTransform == null) return;
+    PathComparer.Tick(playerTransform.position);
+    UpdateGhost();
+  }
   private void Update()
   {
-    if (playerTransform == null)
-      return;
+    if (playerTransform == null) return;
     PathComparer.Tick(playerTransform.position);
+    UpdateGhost();
+  }
+
+  private GameObject ghost;
+
+  private void UpdateGhost()
+  {
+    if (!PathComparer.IsRunning)
+    {
+      if (ghost != null)
+      {
+        Destroy(ghost);
+        ghost = null;
+      }
+      return;
+    }
+
+    if (ghost == null && PathComparer.HasComparison)
+    {
+      ghost = CreateGhost(playerTransform.gameObject);
+    }
+
+    if (ghost != null)
+    {
+      Vector3 pos;
+      if (PathComparer.TryGetBestPosition(PathComparer.ElapsedTime, out pos))
+      {
+        ghost.transform.position = pos;
+      }
+    }
+  }
+
+  // Clones the player's visuals to trail the best-run path. Strips every
+  // script/collider/camera/audio-listener so the clone can't act like a
+  // second player, control input, or collide with anything - it's purely
+  // a visual marker.
+  private GameObject CreateGhost(GameObject player)
+  {
+    var clone = (GameObject)Instantiate(player, player.transform.position, player.transform.rotation);
+    clone.name = "BestRunGhost";
+    clone.tag = "Untagged";
+
+    foreach (var behaviour in clone.GetComponentsInChildren<MonoBehaviour>())
+    {
+      Destroy(behaviour);
+    }
+    foreach (var collider in clone.GetComponentsInChildren<Collider>())
+    {
+      Destroy(collider);
+    }
+    foreach (var rb in clone.GetComponentsInChildren<Rigidbody>())
+    {
+      Destroy(rb);
+    }
+    foreach (var cam in clone.GetComponentsInChildren<Camera>())
+    {
+      Destroy(cam);
+    }
+    foreach (var listener in clone.GetComponentsInChildren<AudioListener>())
+    {
+      Destroy(listener);
+    }
+
+    MakeTransparent(clone, 0.35f);
+    return clone;
+  }
+
+  private static void MakeTransparent(GameObject go, float alpha)
+  {
+    var transparentShader = Shader.Find("Transparent/Diffuse");
+    foreach (var renderer in go.GetComponentsInChildren<Renderer>())
+    {
+      foreach (var mat in renderer.materials)
+      {
+        if (transparentShader != null)
+        {
+          mat.shader = transparentShader;
+        }
+        Color c = mat.color;
+        c.a = alpha;
+        mat.color = c;
+      }
+    }
   }
 
   private void OnGUI()
