@@ -15,29 +15,19 @@ public class PlayerCoordsUI : MonoBehaviour
   private static readonly Color BehindColor = Color.red;
   private Texture2D _bgTexture;
 
-  private float runStartRealtime = -1f;
-
   /// <summary>
-  /// Call this from wherever the run/split actually starts (the same place
-  /// that currently kicks off the split timer), passing the level index.
+  /// Optional manual hook if you want to explicitly start/end tracking from
+  /// this component instead of relying on Class1.cs's WASD/level-clear
+  /// detection. Not required for normal use.
   /// </summary>
   public void OnRunStarted(int level)
   {
-    runStartRealtime = Time.realtimeSinceStartup;
     PathComparer.StartRun(level);
   }
 
-  /// <summary>
-  /// Call this from wherever the run/split actually ends, passing whether
-  /// the level was genuinely cleared (vs quit/reset) so a partial run never
-  /// overwrites the saved best path. Class1.cs's EndLevelTrigger patch
-  /// already calls PathComparer.EndRun(true) directly on level clear, so
-  /// this is only needed if you also want to signal aborted/reset runs.
-  /// </summary>
   public void OnRunEnded(bool completed)
   {
     PathComparer.EndRun(completed);
-    runStartRealtime = -1f;
   }
 
   // Define the two target points
@@ -53,11 +43,9 @@ public class PlayerCoordsUI : MonoBehaviour
 
   private void Update()
   {
-    if (runStartRealtime < 0f || playerTransform == null)
+    if (playerTransform == null)
       return;
-
-    float elapsed = Time.realtimeSinceStartup - runStartRealtime;
-    PathComparer.Sample(elapsed, playerTransform.position);
+    PathComparer.Tick(playerTransform.position);
   }
 
   private void OnGUI()

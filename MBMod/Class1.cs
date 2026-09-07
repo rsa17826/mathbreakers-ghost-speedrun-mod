@@ -20,6 +20,19 @@ public class MBMod : BaseUnityPlugin
 
   private void Update()
   {
+    if (
+      !PathComparer.IsRunning
+      && (
+        Input.GetKeyDown(KeyCode.W)
+        || Input.GetKeyDown(KeyCode.A)
+        || Input.GetKeyDown(KeyCode.S)
+        || Input.GetKeyDown(KeyCode.D)
+      )
+    )
+    {
+      PathComparer.StartRun(Application.loadedLevel);
+    }
+
     if (Input.GetKeyDown(KeyCode.F10))
     {
       GameObject egg = GameObject.Find("Snowball");
@@ -133,6 +146,9 @@ public class MBMod : BaseUnityPlugin
 
     var harmony = new Harmony("nyix.mathbreakers.a");
 
+    var uiObj2 = new GameObject("PlayerCoordsUI");
+    UnityEngine.Object.DontDestroyOnLoad(uiObj2);
+    var ui2 = uiObj2.AddComponent<PlayerCoordsUI>();
     harmony.PatchAll();
     Log.LogInfo("Mathbreakers Save Test loaded!");
   }

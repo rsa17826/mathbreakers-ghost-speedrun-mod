@@ -28,6 +28,7 @@ public static class PathComparer
   private static int bestRunSearchIndex;
   private static int currentLevel = -1;
   private static float lastRecordTime;
+  private static float runStartRealtime;
 
   private const float RecordInterval = 0.1f; // seconds between recorded samples
   private const int BackwardSearchWindow = 20; // samples to look behind the last match
@@ -35,6 +36,12 @@ public static class PathComparer
 
   /// <summary>Seconds behind (positive) or ahead (negative) of the best run's pace at the closest matching position. Zero if no best run is loaded yet.</summary>
   public static float DeltaSeconds { get; private set; }
+
+  /// <summary>True while a run is actively being recorded (between StartRun and EndRun).</summary>
+  public static bool IsRunning
+  {
+    get { return currentLevel >= 0; }
+  }
 
   /// <summary>True once a best-run path has been loaded for the active level, i.e. DeltaSeconds is meaningful.</summary>
   public static bool HasComparison
@@ -55,7 +62,16 @@ public static class PathComparer
     bestRunSearchIndex = 0;
     DeltaSeconds = 0f;
     lastRecordTime = float.NegativeInfinity;
+    runStartRealtime = Time.realtimeSinceStartup;
     bestRun = LoadBestPath(level);
+  }
+
+  /// <summary>Call every frame with the player's current position; does nothing if no run is active. Elapsed time is measured internally from StartRun.</summary>
+  public static void Tick(Vector3 position)
+  {
+    if (!IsRunning)
+      return;
+    Sample(Time.realtimeSinceStartup - runStartRealtime, position);
   }
 
   /// <summary>Call every frame (e.g. from Update) with seconds elapsed since the run/split started and the player's current position.</summary>
