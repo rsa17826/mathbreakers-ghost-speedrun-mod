@@ -1,0 +1,15 @@
+mathbreakers/*
+!mathbreakers/doorstop_config.ini
+!mathbreakers/user.reg
+!mathbreakers/mathbreakers.desktop
+!mathbreakers/Mathbreakers.png
+!mathbreakers/.doorstop_version
+.direnv
+**/bin
+**/bin/**
+**/obj
+**/obj/**
+*.7z
+*.zip
+**/node_modules
+node_modules

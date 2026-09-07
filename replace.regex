@@ -1,0 +1,51 @@
+
+@file /output_log\.txt$
+@regex (\n)\n+
+@replace $1
+@untilfail
+@endregex
+
+@file \.cs$
+@regex private string _host = "archipelago\.gg";
+@replace private string _host = "ap.localhost";
+@endregex
+@regex private string _port = "38281";
+@replace private string _port = "80";
+@endregex
+@regex private string _game = "Mathbreakers";
+@replace private string _game = "Mathbreakers";
+@endregex
+@regex private string _playerName = "";
+@replace private string _playerName = "nyix";
+@endregex
+@regex private string _password = "";
+@replace private string _password = "";
+@endregex
+@regex private string _status = "";
+@replace private string _status = "";
+@endregex
+@regex field\.SetValue\(walker, val \* 2f\);
+@replace field.SetValue(walker, val * 4f);
+@endregex
+! @regex UseWss = true;
+! @replace UseWss = false;
+! @endregex
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

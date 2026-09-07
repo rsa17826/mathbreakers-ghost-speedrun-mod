@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net35</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <!-- BepInEx has no "publish" step - the plugins folder just needs the
+         built DLL plus every dependency DLL sitting next to it. Without
+         this, NuGet package assemblies (WebSocketSharp, Newtonsoft.Json)
+         never get copied into bin/, so they're missing at runtime even
+         though the build succeeds - Unity's Mono can't load the types
+         that reference them (TypeLoadException). -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Unity 4.2.0f4's embedded Mono (CLR 3.0.40818.0) is extremely old -
+         far older than what "net35" NuGet builds actually assume they're
+         compatible with. Newtonsoft.Json 13.x's net35 build uses IL this
+         Mono's verifier can't load at all (TypeLoadException as early as
+         AddComponent, before Awake even runs). 6.0.8 is from the same era
+         as this engine and is the version widely used by old Unity
+         asset-store plugins/mods for exactly this compatibility reason. -->
+    <PackageReference Include="WebSocketSharp" Version="1.0.3-rc11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- These three are already present at runtime (game folder /
+         BepInEx core folder). CopyLocalLockFileAssemblies would otherwise
+         copy our own build-time reference copies into plugins/ too,
+         giving Mono two different assemblies both named UnityEngine /
+         BepInEx / 0Harmony side by side - any type that crosses that
+         boundary then looks like two unrelated types with the same name
+         (TypeLoadException). Private=False stops that. -->
+    <Reference Include="BepInEx">
+      <HintPath>../mathbreakers/BepInEx/core/BepInEx.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+
+    <Reference Include="0Harmony">
+      <HintPath>../mathbreakers/BepInEx/core/0Harmony.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+
+    <Reference Include="UnityEngine">
+      <HintPath>../mathbreakers/Mathbreakers_Data/Managed/UnityEngine.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+
+    <!-- The game's own compiled scripts (PositiveNegativeLightArea,
+         NumberInfo, GlobalVars, etc. all live here). Also already
+         present at runtime, so Private=False like the others above. -->
+    <Reference Include="Assembly-CSharp">
+      <HintPath>../mathbreakers/Mathbreakers_Data/Managed/Assembly-CSharp.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

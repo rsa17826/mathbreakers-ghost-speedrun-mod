@@ -1,0 +1,54 @@
+			GiveWeapon(new SnowballWeapon(), 8);
+
+      http://imaginarynumber.co/Analytics.php
+
+
+      // MenuButton_UnlockAll
+using UnityEngine;
+
+public class MenuButton_UnlockAll : MenuButton
+{
+	public Texture2D unlockedTex;
+
+	public Texture2D lockedTex;
+
+	private bool state;
+
+	private void Start()
+	{
+		state = PlayerPrefs.GetInt("unlockall") > 0;
+		StateChanged();
+	}
+
+	private void StateChanged()
+	{
+		if (state)
+		{
+			base.renderer.material.mainTexture = unlockedTex;
+			PlayerPrefs.SetInt("unlockall", 1);
+		}
+		else
+		{
+			base.renderer.material.mainTexture = lockedTex;
+			PlayerPrefs.SetInt("unlockall", 0);
+		}
+		Object[] array = Object.FindObjectsOfType(typeof(MenuButton_LevelSelect));
+		for (int i = 0; i < array.Length; i++)
+		{
+			MenuButton_LevelSelect menuButton_LevelSelect = (MenuButton_LevelSelect)array[i];
+			menuButton_LevelSelect.CheckUnlocks();
+		}
+	}
+
+	public override void MouseDown()
+	{
+		base.MouseDown();
+		state = !state;
+		StateChanged();
+	}
+}
+
+ - call StateChanged when receiving item of type level:
+each pi is a check - lv 4, see if more
+
+make throw a weapon

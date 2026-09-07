@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+rm -rf mathbreakers/BepInEx
+7zz a -mx9 -md64m mb.7z mathbreakers

@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+cd MBMod || exit 1
+
+while true; do
+  # Capture build output and exit code
+  output=$(dotnet build 2>&1)
+  ec=$?
+
+  if [ $ec -eq 0 ]; then
+    echo "Build successful!"
+    cp bin/Debug/net35/*.dll ../mathbreakers/BepInEx/plugins/
+    break
+  fi
+
+  # Check for CS1002 error (missing semicolon)
+  if echo "$output" | grep -q "error CS1002"; then
+    # Extract file path, line, and column from error output
+    match=$(echo "$output" | grep -oE '[^[:space:]]+\.cs\([0-9]+,[0-9]+\)' | head -n 1)
+
+    if [[ "$match" =~ ^(.+)\(([0-9]+),([0-9]+)\)$ ]]; then
+      file="${BASH_REMATCH[1]}"
+      line="${BASH_REMATCH[2]}"
+      col="${BASH_REMATCH[3]}"
+
+      echo "Auto-fixing missing semicolon in $file at line $line, col $col..."
+
+      # Use Python to accurately insert the semicolon at the specified position
+      python3 -c "
+with open('$file', 'r') as f:
+    lines = f.readlines()
+idx = int('$line') - 1
+col_idx = int('$col') - 1
+target = lines[idx]
+if len(target) >= col_idx:
+    lines[idx] = target[:col_idx] + ';' + target[col_idx:]
+else:
+    lines[idx] = target.rstrip('\n') + ';\n'
+with open('$file', 'w') as f:
+    f.writelines(lines)
+"
+      # Loop back to recompile
+      continue
+    fi
+  fi
+
+  # If it's another type of error or couldn't parse, print output and exit
+  echo "$output" >&2
+  cd ~/projects/mbmod/ || exit 1
+  exit $ec
+done
+
+cd ~/projects/mbmod/ || exit 1
+./f &

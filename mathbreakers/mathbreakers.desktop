@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Math Breakers
+Exec=wine "/data/games/mathbreakers/Mathbreakers.exe"
+Path=/data/games/mathbreakers/
+Icon=/data/games/mathbreakers/Mathbreakers.png
+Terminal=false
+Categories=Game;
