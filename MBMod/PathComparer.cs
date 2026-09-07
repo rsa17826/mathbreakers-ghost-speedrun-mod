@@ -51,7 +51,8 @@ public static class PathComparer
 
   private static string PathFileFor(int level)
   {
-    return Path.Combine(Application.persistentDataPath, "bestpath_level" + level + ".dat");
+    // return Path.Combine(Application.persistentDataPath, "bestpath_level" + level + ".dat");
+    return "bestpath_level" + level + ".dat";
   }
 
   /// <summary>Call when a run starts (e.g. from the same code that currently starts the split timer).</summary>
