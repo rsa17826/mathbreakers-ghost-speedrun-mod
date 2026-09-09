@@ -28,7 +28,7 @@ public static class PathComparer
   private static int bestRunSearchIndex;
   private static int currentLevel = -1;
   private static float lastRecordTime;
-  private static float runStartRealtime;
+  private static float runStartTime;
 
   // Recording every frame (rather than throttling) matters here: the ghost
   // linearly interpolates between consecutive samples, and a coarse interval
@@ -56,7 +56,7 @@ public static class PathComparer
   /// <summary>Seconds since the current run started, or 0 if no run is active.</summary>
   public static float ElapsedTime
   {
-    get { return IsRunning ? Time.realtimeSinceStartup - runStartRealtime : 0f; }
+    get { return IsRunning ? Time.time - runStartTime : 0f; }
   }
 
   /// <summary>
@@ -115,7 +115,7 @@ public static class PathComparer
     bestRunSearchIndex = 0;
     DeltaSeconds = 0f;
     lastRecordTime = float.NegativeInfinity;
-    runStartRealtime = Time.realtimeSinceStartup;
+    runStartTime = Time.time;
     bestRun = LoadBestPath(level);
     MBMod.Log.LogInfo(
       "[PathComparer] StartRun level="
@@ -130,7 +130,7 @@ public static class PathComparer
   {
     if (!IsRunning)
       return;
-    Sample(Time.realtimeSinceStartup - runStartRealtime, position);
+    Sample(Time.time - runStartTime, position);
   }
 
   /// <summary>Call every frame (e.g. from Update) with seconds elapsed since the run/split started and the player's current position.</summary>
