@@ -34,11 +34,6 @@ public class MBMod : BaseUnityPlugin
       Log.LogInfo("[PathComparer] WASD detected, starting run on level " + Application.loadedLevel);
       PathComparer.StartRun(Application.loadedLevel);
     }
-    // if (PathComparer.IsRunning && (Input.GetKeyDown(KeyCode.Escape)))
-    // {
-    //   Log.LogInfo("[PathComparer] ESC detected, stopping run on level " + Application.loadedLevel);
-    //   PathComparer.EndRun(false);
-    // }
 
     if (Input.GetKeyDown(KeyCode.F10))
     {
@@ -188,3 +183,28 @@ public static class EndLevelTrigger_OnTriggerEnter_Patch
     }
   }
 }
+
+// [HarmonyPatch(typeof(NumberHoopCheckpoint), "Start")]
+// public static class NumberHoopCheckpoint_Start_Patch
+// {
+//   public static void Postfix(NumberHoopCheckpoint __instance)
+//   {
+//     Camera cam = Camera.main;
+//     if (cam == null)
+//     {
+//       MBMod.Log.LogError(
+//         "[BoxColliderVisualizer] Camera.main is null in NumberHoopCheckpoint_Start_Patch; cannot register visualizer."
+//       );
+//       return;
+//     }
+
+//     BoxColliderVisualizer visualizer = cam.gameObject.GetComponent<BoxColliderVisualizer>();
+//     if (visualizer == null)
+//     {
+//       visualizer = cam.gameObject.AddComponent<BoxColliderVisualizer>();
+//     }
+
+//     BoxCollider box = __instance.gameObject.GetComponent<BoxCollider>();
+//     BoxColliderVisualizer.Register(box, new Color(1f, 0f, 0f, 0.15f));
+//   }
+// }

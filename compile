@@ -45,9 +45,9 @@ with open('$file', 'w') as f:
 
   # If it's another type of error or couldn't parse, print output and exit
   echo "$output" >&2
-  cd ~/projects/mbmod/ || exit 1
+  cd ~/projects/mathbreakers-ghost-speedrun-mod/ || exit 1
   exit $ec
 done
 
-cd ~/projects/mbmod/ || exit 1
+cd ~/projects/mathbreakers-ghost-speedrun-mod/ || exit 1
 ./f &
