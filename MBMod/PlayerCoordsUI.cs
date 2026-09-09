@@ -53,19 +53,13 @@ public class PlayerCoordsUI : MonoBehaviour
 
   private void UpdateGhost()
   {
-    if (!PathComparer.IsRunning)
-    {
-      if (ghost != null)
-      {
-        Destroy(ghost);
-        ghost = null;
-      }
-      return;
-    }
-
     if (ghost == null && PathComparer.HasComparison)
     {
       ghost = CreateGhost(playerTransform.gameObject);
+    }
+    if (!PathComparer.IsRunning)
+    {
+      return;
     }
 
     if (ghost != null)
