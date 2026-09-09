@@ -144,6 +144,13 @@ public class PlayerCoordsUI : MonoBehaviour
       {
         playerTransform = player.transform;
       }
+      else if (PathComparer.IsRunning)
+      {
+        Log.LogInfo(
+          "[PathComparer] no player detected, stopping run on level " + Application.loadedLevel
+        );
+        PathComparer.EndRun(false);
+      }
     }
 
     GUI.DrawTexture(_windowRect, _bgTexture, ScaleMode.StretchToFill);
