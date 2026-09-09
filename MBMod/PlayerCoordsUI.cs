@@ -146,9 +146,9 @@ public class PlayerCoordsUI : MonoBehaviour
       }
       else if (PathComparer.IsRunning)
       {
-        Log.LogInfo(
-          "[PathComparer] no player detected, stopping run on level " + Application.loadedLevel
-        );
+        // Log.LogInfo(
+        //   "[PathComparer] no player detected, stopping run on level " + Application.loadedLevel
+        // );
         PathComparer.EndRun(false);
       }
     }
