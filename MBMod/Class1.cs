@@ -95,6 +95,10 @@ public class MBMod : BaseUnityPlugin
     {
       shouldRestart = false;
       Log.LogInfo("[FileWatcher] Processing restart command...");
+      if (PathComparer.IsRunning)
+      {
+        PathComparer.EndRun(false);
+      }
       Application.LoadLevel(currentMode);
     }
 
