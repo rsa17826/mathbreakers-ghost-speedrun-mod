@@ -194,6 +194,8 @@ public static class PathComparer
 
   private static void SaveIfBest(int level, List<PathSample> run)
   {
+    if (MBMod.fast)
+      return;
     float thisRunTime = run[run.Count - 1].Time;
     var existing = LoadBestPath(level);
     if (existing != null && existing.Count > 0 && existing[existing.Count - 1].Time <= thisRunTime)

@@ -12,15 +12,92 @@ using UnityEngine;
 public class MBMod : BaseUnityPlugin
 {
   // Levels currently unlocked by our mod.
-  public static readonly bool fast = false;
+  public static readonly bool fast = true;
   public static readonly HashSet<int> UnlockedLevels = new HashSet<int>();
   public static HashSet<string> unlockedWeapons = new HashSet<string>();
 
   public static ManualLogSource Log;
   public KeyCode DumpKey = KeyCode.F9;
 
+  // FileSystemWatcher reference and flags for cross-thread sync
+  private FileSystemWatcher watcher;
+  private static string watchPath;
+  private static bool shouldRestart = false;
+  public static int currentMode = 0;
+
+  private void Awake()
+  {
+    Log = Logger;
+
+    Log.LogInfo("================================");
+
+    var harmony = new Harmony("nyix.mathbreakers.a");
+
+    var uiObj2 = new GameObject("PlayerCoordsUI");
+    UnityEngine.Object.DontDestroyOnLoad(uiObj2);
+    var ui2 = uiObj2.AddComponent<PlayerCoordsUI>();
+    harmony.PatchAll();
+
+    SetupFileWatcher();
+
+    Log.LogInfo("Mathbreakers Save Test loaded!");
+  }
+
+  private void SetupFileWatcher()
+  {
+    // Watch the directory where the game executable or BepInEx root resides
+    watchPath = Paths.GameRootPath;
+
+    watcher = new FileSystemWatcher(watchPath);
+    watcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size;
+    watcher.Filter = "*.*"; // Watch all files in root or restrict to specific filenames
+
+    watcher.Changed += OnFileChanged;
+    watcher.Created += OnFileChanged;
+
+    watcher.EnableRaisingEvents = true;
+    Log.LogInfo("[FileWatcher] Watching for commands in: " + watchPath);
+  }
+
+  private static void OnFileChanged(object sender, FileSystemEventArgs e)
+  {
+    string fileName = Path.GetFileName(e.FullPath).ToLower();
+
+    if (fileName == "mode")
+    {
+      try
+      {
+        // Read contents of 'mode' file
+        string content = File.ReadAllText(e.FullPath).Trim();
+        if (int.TryParse(content, out int parsedMode))
+        {
+          currentMode = parsedMode + 1;
+          shouldRestart = true;
+          Log.LogInfo("[FileWatcher] Mode updated to: " + currentMode);
+          try
+          {
+            File.Delete(e.FullPath);
+          }
+          catch { }
+        }
+      }
+      catch (Exception ex)
+      {
+        // File may be temporarily locked by external process write
+      }
+    }
+  }
+
   private void Update()
   {
+    // Execute pending restart requests safely on Unity's main thread
+    if (shouldRestart)
+    {
+      shouldRestart = false;
+      Log.LogInfo("[FileWatcher] Processing restart command...");
+      Application.LoadLevel(currentMode);
+    }
+
     if (
       !PathComparer.IsRunning
       && (
@@ -140,19 +217,13 @@ public class MBMod : BaseUnityPlugin
     }
   }
 
-  private void Awake()
+  private void OnDestroy()
   {
-    Log = Logger;
-
-    Log.LogInfo("================================");
-
-    var harmony = new Harmony("nyix.mathbreakers.a");
-
-    var uiObj2 = new GameObject("PlayerCoordsUI");
-    UnityEngine.Object.DontDestroyOnLoad(uiObj2);
-    var ui2 = uiObj2.AddComponent<PlayerCoordsUI>();
-    harmony.PatchAll();
-    Log.LogInfo("Mathbreakers Save Test loaded!");
+    if (watcher != null)
+    {
+      watcher.EnableRaisingEvents = false;
+      watcher.Dispose();
+    }
   }
 }
 
