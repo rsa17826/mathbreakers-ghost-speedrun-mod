@@ -12,7 +12,7 @@ using UnityEngine;
 public class MBMod : BaseUnityPlugin
 {
   // Levels currently unlocked by our mod.
-  public static readonly bool fast = true;
+  public static readonly bool fast = false;
   public static readonly HashSet<int> UnlockedLevels = new HashSet<int>();
   public static HashSet<string> unlockedWeapons = new HashSet<string>();
 
