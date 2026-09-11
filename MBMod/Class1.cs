@@ -248,7 +248,6 @@ public static class EndLevelTrigger_OnTriggerEnter_Patch
       {
         // Store the level integers to prevent accidental string concatenation issues
         int currentLevel = Application.loadedLevel;
-        int nextLevel = currentLevel + 1;
 
         MBMod.Log.LogInfo("[PathComparer] Calling EndRun(true) for level " + currentLevel);
         // Call your custom method
