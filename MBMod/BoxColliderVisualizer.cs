@@ -5,6 +5,8 @@ using UnityEngine;
 // registered BoxCollider each frame. Register colliders via Register().
 public class BoxColliderVisualizer : MonoBehaviour
 {
+  public static bool isEnabled = false;
+
   private static readonly List<BoxCollider> targets = new List<BoxCollider>();
   private static readonly List<Color> targetColors = new List<Color>();
 
@@ -12,6 +14,15 @@ public class BoxColliderVisualizer : MonoBehaviour
 
   // Reused every frame instead of allocated per-draw.
   private static readonly Vector3[] p = new Vector3[8];
+
+  private void Update()
+  {
+    if (Input.GetKeyDown(KeyCode.F4))
+    {
+      isEnabled = !isEnabled;
+      Debug.Log($"[BoxColliderVisualizer] Visualizer enabled: {isEnabled}");
+    }
+  }
 
   public static void Register(BoxCollider box, Color color)
   {
@@ -37,7 +48,7 @@ public class BoxColliderVisualizer : MonoBehaviour
 
   private void OnRenderObject()
   {
-    if (targets.Count == 0)
+    if (!isEnabled || targets.Count == 0)
       return;
 
     CreateLineMaterial();

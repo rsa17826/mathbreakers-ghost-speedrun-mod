@@ -155,7 +155,7 @@ public class MBMod : BaseUnityPlugin
       }
       Debug.Log("[NodeDumper] === DUMP COMPLETE ===");
     }
-    if (fast)
+    if (fast || Input.GetKeyDown(KeyCode.F7))
     {
       GameObject player = GameObject.FindWithTag("Player");
       if (player != null)
@@ -258,27 +258,27 @@ public static class EndLevelTrigger_OnTriggerEnter_Patch
   }
 }
 
-// [HarmonyPatch(typeof(NumberHoopCheckpoint), "Start")]
-// public static class NumberHoopCheckpoint_Start_Patch
-// {
-//   public static void Postfix(NumberHoopCheckpoint __instance)
-//   {
-//     Camera cam = Camera.main;
-//     if (cam == null)
-//     {
-//       MBMod.Log.LogError(
-//         "[BoxColliderVisualizer] Camera.main is null in NumberHoopCheckpoint_Start_Patch; cannot register visualizer."
-//       );
-//       return;
-//     }
+[HarmonyPatch(typeof(NumberHoopCheckpoint), "Start")]
+public static class NumberHoopCheckpoint_Start_Patch
+{
+  public static void Postfix(NumberHoopCheckpoint __instance)
+  {
+    Camera cam = Camera.main;
+    if (cam == null)
+    {
+      MBMod.Log.LogError(
+        "[BoxColliderVisualizer] Camera.main is null in NumberHoopCheckpoint_Start_Patch; cannot register visualizer."
+      );
+      return;
+    }
 
-//     BoxColliderVisualizer visualizer = cam.gameObject.GetComponent<BoxColliderVisualizer>();
-//     if (visualizer == null)
-//     {
-//       visualizer = cam.gameObject.AddComponent<BoxColliderVisualizer>();
-//     }
+    BoxColliderVisualizer visualizer = cam.gameObject.GetComponent<BoxColliderVisualizer>();
+    if (visualizer == null)
+    {
+      visualizer = cam.gameObject.AddComponent<BoxColliderVisualizer>();
+    }
 
-//     BoxCollider box = __instance.gameObject.GetComponent<BoxCollider>();
-//     BoxColliderVisualizer.Register(box, new Color(1f, 0f, 0f, 0.15f));
-//   }
-// }
+    BoxCollider box = __instance.gameObject.GetComponent<BoxCollider>();
+    BoxColliderVisualizer.Register(box, new Color(1f, 0f, 0f, 0.15f));
+  }
+}

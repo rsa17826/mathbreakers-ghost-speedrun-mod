@@ -1,0 +1,6 @@
+
+@file /output_log\.txt$
+@regex (\n)\n+
+@replace $1
+@untilfail
+@endregex
