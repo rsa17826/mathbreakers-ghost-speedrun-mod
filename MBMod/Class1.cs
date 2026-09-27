@@ -15,6 +15,7 @@ public class MBMod : BaseUnityPlugin
   public static readonly bool fast = false;
   public static readonly HashSet<int> UnlockedLevels = new HashSet<int>();
   public static HashSet<string> unlockedWeapons = new HashSet<string>();
+  public static float maxBad = 0f;
 
   public static ManualLogSource Log;
   public KeyCode DumpKey = KeyCode.F9;
@@ -22,13 +23,19 @@ public class MBMod : BaseUnityPlugin
   // FileSystemWatcher reference and flags for cross-thread sync
   private FileSystemWatcher watcher;
   private static string watchPath;
-  private static bool shouldRestart = false;
+  public static float lastRestartTime;
+
+  // CHANGED: Made public so PlayerCoordsUI can access it
+  public static bool shouldRestart = false;
   public static int currentMode = 0;
+
+  // ADDED: Missing path variable definition
+  private static readonly string MaxBadFilePath = "maxBadTime";
 
   private void Awake()
   {
     Log = Logger;
-
+    PlayerCoordsUI.Log = Logger;
     Log.LogInfo("================================");
 
     var harmony = new Harmony("nyix.mathbreakers.a");
@@ -37,6 +44,27 @@ public class MBMod : BaseUnityPlugin
     UnityEngine.Object.DontDestroyOnLoad(uiObj2);
     var ui2 = uiObj2.AddComponent<PlayerCoordsUI>();
     harmony.PatchAll();
+
+    if (File.Exists(MaxBadFilePath))
+    {
+      try
+      {
+        string fileContent = File.ReadAllText(MaxBadFilePath).Trim();
+        if (float.TryParse(fileContent, out float parsedValue))
+        {
+          maxBad = parsedValue;
+          Log.LogInfo($"Loaded maxBad value: {maxBad}");
+        }
+        else
+        {
+          Log.LogWarning($"Failed to parse float from file: {fileContent}");
+        }
+      }
+      catch (Exception ex)
+      {
+        Log.LogError($"Error reading maxBadTime file: {ex.Message}");
+      }
+    }
 
     SetupFileWatcher();
 
@@ -81,7 +109,7 @@ public class MBMod : BaseUnityPlugin
           catch { }
         }
       }
-      catch (Exception ex)
+      catch
       {
         // File may be temporarily locked by external process write
       }
@@ -93,6 +121,7 @@ public class MBMod : BaseUnityPlugin
     // Execute pending restart requests safely on Unity's main thread
     if (shouldRestart)
     {
+      lastRestartTime = Time.time;
       shouldRestart = false;
       Log.LogInfo("[FileWatcher] Processing restart command...");
       if (PathComparer.IsRunning)
@@ -128,6 +157,7 @@ public class MBMod : BaseUnityPlugin
         Debug.Log("Easter egg GameObject not found in current scene.");
       }
     }
+
     if (Input.GetKeyDown(DumpKey))
     {
       Debug.Log("[NodeDumper] === DUMPING ALL LEVEL NODES ===");
@@ -155,6 +185,7 @@ public class MBMod : BaseUnityPlugin
       }
       Debug.Log("[NodeDumper] === DUMP COMPLETE ===");
     }
+
     if (fast || Input.GetKeyDown(KeyCode.F7))
     {
       GameObject player = GameObject.FindWithTag("Player");
@@ -234,7 +265,6 @@ public class MBMod : BaseUnityPlugin
 [HarmonyPatch(typeof(EndLevelTrigger), "OnTriggerEnter")]
 public static class EndLevelTrigger_OnTriggerEnter_Patch
 {
-  // Inject the 'other' parameter and the private 'timeout' field (using ___)
   public static void Prefix(EndLevelTrigger __instance, Collider other, float ___timeout)
   {
     if (__instance != null)
@@ -243,14 +273,11 @@ public static class EndLevelTrigger_OnTriggerEnter_Patch
         "[PathComparer] EndLevelTrigger fired. timeout=" + ___timeout + " otherTag=" + other.tag
       );
 
-      // Replicate the original trigger condition
       if (___timeout < 0f && other.tag == "Player")
       {
-        // Store the level integers to prevent accidental string concatenation issues
         int currentLevel = Application.loadedLevel;
 
         MBMod.Log.LogInfo("[PathComparer] Calling EndRun(true) for level " + currentLevel);
-        // Call your custom method
         PathComparer.EndRun(true);
         File.Create("level_cleared.txt");
       }

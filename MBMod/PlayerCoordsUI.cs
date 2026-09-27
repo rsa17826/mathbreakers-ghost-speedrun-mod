@@ -1,3 +1,5 @@
+using System.IO;
+using BepInEx.Logging;
 using UnityEngine;
 
 /// <summary>
@@ -5,6 +7,7 @@ using UnityEngine;
 /// </summary>
 public class PlayerCoordsUI : MonoBehaviour
 {
+  public static ManualLogSource Log;
   private Transform playerTransform;
 
   // Expanded window height to fit player pos, two distances, and the best-run delta
@@ -160,6 +163,19 @@ public class PlayerCoordsUI : MonoBehaviour
       if (PathComparer.HasComparison)
       {
         float delta = PathComparer.DeltaSeconds;
+        if (
+          delta > MBMod.maxBad
+          && MBMod.maxBad != 0f
+          && PathComparer.IsRunning
+          && !MBMod.shouldRestart
+          && Time.time - MBMod.lastRestartTime >= MBMod.maxBad
+        )
+        {
+          MBMod.lastRestartTime = Time.time;
+          PathComparer.EndRun(false);
+          Application.LoadLevel(MBMod.currentMode);
+          File.Create("levelWasReset").Close();
+        }
         string sign = delta >= 0 ? "+" : "";
         string deltaText = string.Format("Best Run: {0}{1:F2}s", sign, delta);
         Color deltaColor = delta <= 0 ? AheadColor : BehindColor;

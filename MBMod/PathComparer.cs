@@ -39,7 +39,7 @@ public static class PathComparer
   private const int ForwardSearchWindow = 1200; // samples to look ahead of the last match (~20s at 60fps)
 
   /// <summary>Seconds behind (positive) or ahead (negative) of the best run's pace at the closest matching position. Zero if no best run is loaded yet.</summary>
-  public static float DeltaSeconds { get; private set; }
+  public static float DeltaSeconds { get; set; }
 
   /// <summary>True while a run is actively being recorded (between StartRun and EndRun).</summary>
   public static bool IsRunning
