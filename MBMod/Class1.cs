@@ -78,7 +78,7 @@ public class MBMod : BaseUnityPlugin
 
     watcher = new FileSystemWatcher(watchPath);
     watcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size;
-    watcher.Filter = "*.*"; // Watch all files in root or restrict to specific filenames
+    watcher.Filter = "mode"; // Watch all files in root or restrict to specific filenames
 
     watcher.Changed += OnFileChanged;
     watcher.Created += OnFileChanged;
