@@ -296,7 +296,7 @@ public static class EndLevelTrigger_OnTriggerEnter_Patch
 
         MBMod.Log.LogInfo("[PathComparer] Calling EndRun(true) for level " + currentLevel);
         PathComparer.EndRun(true);
-        File.Create("level_cleared.txt");
+        File.Create("level_cleared.txt").Close();
       }
     }
   }
