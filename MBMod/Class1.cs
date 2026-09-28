@@ -267,6 +267,16 @@ public class MBMod : BaseUnityPlugin
   private void OnLevelWasLoaded(int level)
   {
     DeathMarkers.SpawnAll(level);
+
+    GameObject bakedHexes = GameObject.Find("Baked Hexes");
+    Log.LogInfo(
+      "[BakedHexes] layer="
+        + LayerMask.LayerToName(bakedHexes.layer)
+        + " position="
+        + bakedHexes.transform.position
+    );
+
+    // ... your existing [Combined] logging loop here
   }
 
   private void OnDestroy()
