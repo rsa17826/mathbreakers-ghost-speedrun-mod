@@ -8,7 +8,7 @@ using BepInEx.Logging;
 using HarmonyLib;
 using UnityEngine;
 
-[BepInPlugin("nyix.mathbreakers.saves", "Mathbreakers Save Test", "1.0.0")]
+[BepInPlugin("nyix.mathbreakers.gsr", "Mathbreakers ghost speedrun mod", "1.0.0")]
 public class MBMod : BaseUnityPlugin
 {
   // Levels currently unlocked by our mod.
@@ -36,7 +36,7 @@ public class MBMod : BaseUnityPlugin
     PlayerCoordsUI.Log = Logger;
     Log.LogInfo("================================");
 
-    var harmony = new Harmony("nyix.mathbreakers.a");
+    var harmony = new Harmony("nyix.mathbreakers.gsr");
 
     var uiObj2 = new GameObject("PlayerCoordsUI");
     UnityEngine.Object.DontDestroyOnLoad(uiObj2);
@@ -76,7 +76,7 @@ public class MBMod : BaseUnityPlugin
 
     watcher = new FileSystemWatcher(watchPath);
     watcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size;
-    watcher.Filter = "mode"; // Watch all files in root or restrict to specific filenames
+    watcher.Filter = "mode";
 
     watcher.Changed += OnFileChanged;
     watcher.Created += OnFileChanged;
@@ -275,8 +275,6 @@ public class MBMod : BaseUnityPlugin
         + " position="
         + bakedHexes.transform.position
     );
-
-    // ... your existing [Combined] logging loop here
   }
 
   private void OnDestroy()
