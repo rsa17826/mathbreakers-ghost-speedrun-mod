@@ -14,3 +14,7 @@ mathbreakers/*
 **/node_modules
 node_modules
 !bestpath_level*
+**/__pycache__
+**/__pycache__/**
+__pycache__
+.ruff_cache
