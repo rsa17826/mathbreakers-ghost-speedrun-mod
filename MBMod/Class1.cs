@@ -25,11 +25,9 @@ public class MBMod : BaseUnityPlugin
   private static string watchPath;
   public static float lastRestartTime;
 
-  // CHANGED: Made public so PlayerCoordsUI can access it
   public static bool shouldRestart = false;
   public static int currentMode = 0;
 
-  // ADDED: Missing path variable definition
   private static readonly string MaxBadFilePath = "maxBadTime";
 
   private void Awake()
@@ -154,6 +152,11 @@ public class MBMod : BaseUnityPlugin
       PathComparer.StartRun(Application.loadedLevel);
     }
 
+    if (Input.GetKeyDown(KeyCode.F4))
+    {
+      HitboxMarkers.Toggle();
+    }
+
     if (Input.GetKeyDown(KeyCode.F10))
     {
       GameObject egg = GameObject.Find("Snowball");
@@ -261,7 +264,6 @@ public class MBMod : BaseUnityPlugin
     }
   }
 
-  // Fires after every level load (including reloading the same level).
   private void OnLevelWasLoaded(int level)
   {
     DeathMarkers.SpawnAll(level);
@@ -305,22 +307,7 @@ public static class NumberHoopCheckpoint_Start_Patch
 {
   public static void Postfix(NumberHoopCheckpoint __instance)
   {
-    Camera cam = Camera.main;
-    if (cam == null)
-    {
-      MBMod.Log.LogError(
-        "[BoxColliderVisualizer] Camera.main is null in NumberHoopCheckpoint_Start_Patch; cannot register visualizer."
-      );
-      return;
-    }
-
-    BoxColliderVisualizer visualizer = cam.gameObject.GetComponent<BoxColliderVisualizer>();
-    if (visualizer == null)
-    {
-      visualizer = cam.gameObject.AddComponent<BoxColliderVisualizer>();
-    }
-
     BoxCollider box = __instance.gameObject.GetComponent<BoxCollider>();
-    BoxColliderVisualizer.Register(box, new Color(1f, 0f, 0f, 0.15f));
+    HitboxMarkers.Create(box, new Color(1f, 0f, 0f, 0.5f));
   }
 }
