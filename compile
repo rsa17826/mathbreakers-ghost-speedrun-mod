@@ -8,7 +8,7 @@ while true; do
 
   if [ $ec -eq 0 ]; then
     echo "Build successful!"
-    cp bin/Debug/net35/*.dll ../mathbreakers/BepInEx/plugins/
+    mv bin/Debug/net35/*.dll ../mathbreakers/BepInEx/plugins/
     break
   fi
 

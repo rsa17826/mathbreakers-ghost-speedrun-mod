@@ -128,6 +128,15 @@ public class MBMod : BaseUnityPlugin
       {
         PathComparer.EndRun(false);
       }
+      GameObject deadPlayer = GameObject.FindWithTag("Player");
+      if (deadPlayer == null)
+      {
+        Log.LogError("[DeathMarkers] No Player found on restart; death marker not stored.");
+      }
+      else
+      {
+        DeathMarkers.Add(Application.loadedLevel, deadPlayer.transform.position);
+      }
       Application.LoadLevel(currentMode);
     }
 
@@ -250,6 +259,12 @@ public class MBMod : BaseUnityPlugin
         }
       }
     }
+  }
+
+  // Fires after every level load (including reloading the same level).
+  private void OnLevelWasLoaded(int level)
+  {
+    DeathMarkers.SpawnAll(level);
   }
 
   private void OnDestroy()
