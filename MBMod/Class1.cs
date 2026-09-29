@@ -39,7 +39,7 @@ public class MBMod : BaseUnityPlugin
   static Texture2D playerTex;
   static Mesh customMesh;
   static bool loadCustomPlayer;
-  const float modelScale = 10f; // tweak after first look
+  const float modelScale = 7f; // tweak after first look
 
   private void Awake()
   {
@@ -214,51 +214,6 @@ public class MBMod : BaseUnityPlugin
         .GetComponentInChildren<SkinnedMeshRenderer>();
       smr.sharedMaterial.color = Color.white;
     }
-    // if (Input.GetKeyDown(KeyCode.F3))
-    // {
-    //   GameObject player = GameObject.FindWithTag("Player");
-    //   Mesh mesh = player.GetComponentInChildren<SkinnedMeshRenderer>().sharedMesh;
-    //   int size = 1024;
-    //   Texture2D t = new Texture2D(size, size);
-    //   Color[] fill = new Color[size * size];
-    //   for (int i = 0; i < fill.Length; i++)
-    //     fill[i] = Color.black;
-    //   t.SetPixels(fill);
-
-    //   Vector2[] uv = mesh.uv;
-    //   int[] tris = mesh.triangles;
-    //   for (int i = 0; i < tris.Length; i += 3)
-    //   {
-    //     for (int e = 0; e < 3; e++)
-    //     {
-    //       Vector2 a = uv[tris[i + e]] * (size - 1);
-    //       Vector2 b = uv[tris[i + (e + 1) % 3]] * (size - 1);
-    //       int steps = (int)Vector2.Distance(a, b) + 1;
-    //       for (int s = 0; s <= steps; s++)
-    //       {
-    //         Vector2 p = Vector2.Lerp(a, b, s / (float)steps);
-    //         t.SetPixel((int)p.x, (int)p.y, Color.white);
-    //       }
-    //     }
-    //   }
-    //   t.Apply();
-    //   File.WriteAllBytes("uv_template.png", t.EncodeToPNG());
-    // }
-    // if (Input.GetKeyDown(KeyCode.F5))
-    // {
-    //   GameObject player = GameObject.FindWithTag("Player");
-    //   SkinnedMeshRenderer smr = player.GetComponentInChildren<SkinnedMeshRenderer>();
-    //   Material m = smr.material;
-    //   Mesh mesh = smr.sharedMesh;
-    //   Log.LogInfo(
-    //     $"[Player] mesh={mesh.name} verts={mesh.vertexCount} uv={mesh.uv.Length} colors={mesh.colors.Length} bones={smr.bones.Length} rootBone={smr.rootBone}"
-    //   );
-    //   Log.LogInfo(
-    //     $"[Player] _MainTex={m.HasProperty("_MainTex")} _Color={m.HasProperty("_Color")} color={m.color}"
-    //   );
-    //   foreach (Transform b in smr.bones)
-    //     Log.LogInfo($"[Player] bone {b.name}");
-    // }
     if (Input.GetKeyDown(KeyCode.F6))
     {
       foreach (Renderer r in hidden)
@@ -537,7 +492,11 @@ public class MBMod : BaseUnityPlugin
       }
       m.boneWeights = weights;
       m.bindposes = bind;
-
+      Vector3 shift = new Vector3(0f, -1f, 0f);
+      for (int i = 0; i < v.Length; i++)
+        v[i] += shift;
+      m.vertices = v;
+      m.RecalculateBounds();
       smr.sharedMesh = m;
 
       Material mat = new Material(Shader.Find("Diffuse"));
@@ -545,10 +504,6 @@ public class MBMod : BaseUnityPlugin
       smr.sharedMaterials = new Material[] { mat }; // mat.shader = Shader.Find("Diffuse"); // or "Transparent/Cutout/Diffuse" if the texture has alpha
       mat.color = Color.white;
       smr.sharedMaterial = mat;
-
-      Log.LogInfo(
-        $"[Player] shader={smr.material.shader.name} tex={smr.material.mainTexture} color={smr.material.color}"
-      );
     }
     if (showDeaths)
       DeathMarkers.SpawnAll(level);
