@@ -126,6 +126,12 @@ public class MBMod : BaseUnityPlugin
       {
         PathComparer.EndRun(false);
       }
+      Log.LogInfo(
+        "[LoadTimer] level "
+          + 4
+          + " started at Time.realtimeSinceStartup="
+          + Time.realtimeSinceStartup
+      );
       GameObject deadPlayer = GameObject.FindWithTag("Player");
       if (deadPlayer == null)
       {
@@ -266,6 +272,12 @@ public class MBMod : BaseUnityPlugin
 
   private void OnLevelWasLoaded(int level)
   {
+    Log.LogInfo(
+      "[LoadTimer] level "
+        + level
+        + " loaded at Time.realtimeSinceStartup="
+        + Time.realtimeSinceStartup
+    );
     DeathMarkers.SpawnAll(level);
 
     GameObject bakedHexes = GameObject.Find("Baked Hexes");

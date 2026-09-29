@@ -2,7 +2,7 @@ import struct
 import UnityPy
 
 SRC = "mathbreakers/Mathbreakers_Data/level3.bak"
-DST = "mathbreakers/Mathbreakers_Data/level3"
+DST = "mathbreakers/Mathbreakers_Data/level3.a"
 
 env1 = UnityPy.load(SRC)
 sf1 = env1.file
