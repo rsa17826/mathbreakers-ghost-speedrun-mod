@@ -18,3 +18,5 @@ node_modules
 **/__pycache__/**
 __pycache__
 .ruff_cache
+asd
+bd
