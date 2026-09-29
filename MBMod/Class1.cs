@@ -16,6 +16,7 @@ public class MBMod : BaseUnityPlugin
   public static readonly HashSet<int> UnlockedLevels = new HashSet<int>();
   public static HashSet<string> unlockedWeapons = new HashSet<string>();
   public static float maxBad = 0f;
+  public static bool showDeaths = false;
 
   public static ManualLogSource Log;
   public KeyCode DumpKey = KeyCode.F9;
@@ -43,6 +44,7 @@ public class MBMod : BaseUnityPlugin
     var ui2 = uiObj2.AddComponent<PlayerCoordsUI>();
     harmony.PatchAll();
 
+    showDeaths = File.Exists("showDeaths");
     if (File.Exists(MaxBadFilePath))
     {
       try
@@ -126,20 +128,17 @@ public class MBMod : BaseUnityPlugin
       {
         PathComparer.EndRun(false);
       }
-      Log.LogInfo(
-        "[LoadTimer] level "
-          + 4
-          + " started at Time.realtimeSinceStartup="
-          + Time.realtimeSinceStartup
-      );
-      GameObject deadPlayer = GameObject.FindWithTag("Player");
-      if (deadPlayer == null)
+      if (showDeaths)
       {
-        Log.LogError("[DeathMarkers] No Player found on restart; death marker not stored.");
-      }
-      else
-      {
-        DeathMarkers.Add(Application.loadedLevel, deadPlayer.transform.position);
+        GameObject deadPlayer = GameObject.FindWithTag("Player");
+        if (deadPlayer == null)
+        {
+          Log.LogError("[DeathMarkers] No Player found on restart; death marker not stored.");
+        }
+        else
+        {
+          DeathMarkers.Add(Application.loadedLevel, deadPlayer.transform.position);
+        }
       }
       Application.LoadLevel(currentMode);
     }
@@ -272,21 +271,8 @@ public class MBMod : BaseUnityPlugin
 
   private void OnLevelWasLoaded(int level)
   {
-    Log.LogInfo(
-      "[LoadTimer] level "
-        + level
-        + " loaded at Time.realtimeSinceStartup="
-        + Time.realtimeSinceStartup
-    );
-    DeathMarkers.SpawnAll(level);
-
-    GameObject bakedHexes = GameObject.Find("Baked Hexes");
-    Log.LogInfo(
-      "[BakedHexes] layer="
-        + LayerMask.LayerToName(bakedHexes.layer)
-        + " position="
-        + bakedHexes.transform.position
-    );
+    if (showDeaths)
+      DeathMarkers.SpawnAll(level);
   }
 
   private void OnDestroy()
