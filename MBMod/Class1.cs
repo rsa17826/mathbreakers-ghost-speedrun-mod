@@ -25,13 +25,19 @@ public class MBMod : BaseUnityPlugin
   private FileSystemWatcher watcher;
   private static string watchPath;
   public static float lastRestartTime;
+  static string[] shaderNames;
+  static int shaderIdx = -1;
+  static List<Renderer> hidden = new List<Renderer>();
 
   public static bool shouldRestart = false;
   public static int currentMode = 0;
 
   private static readonly string MaxBadFilePath = "maxBadTime";
   public static bool loaded;
+  public static bool loadCustomSkybox;
   static Texture2D bgTex;
+  static Texture2D playerTex;
+  static bool loadCustomPlayerTex;
 
   private void Awake()
   {
@@ -67,18 +73,29 @@ public class MBMod : BaseUnityPlugin
         Log.LogError($"Error reading maxBadTime file: {ex.Message}");
       }
     }
-    bgTex = new Texture2D(2, 2);
-    bgTex.hideFlags = HideFlags.HideAndDontSave;
-    bgTex.LoadImage(File.ReadAllBytes("background.png")); // relative to game root, like your other files
-    Log.LogInfo($"[BG] LoadImage={loaded} size={bgTex.width}x{bgTex.height}");
-    var bgObj = new GameObject("BackgroundCamera");
-    UnityEngine.Object.DontDestroyOnLoad(bgObj);
-    var bgCam = bgObj.AddComponent<Camera>();
-    bgCam.cullingMask = 0; // draws no scene objects
-    bgCam.clearFlags = CameraClearFlags.SolidColor;
-    bgCam.cullingMask = 1 << 31;
-    bgObj.AddComponent<BackgroundImage>().tex = bgTex;
-    bgCam.backgroundColor = Color.magenta;
+    if (File.Exists("background.png"))
+    {
+      loadCustomSkybox = true;
+      bgTex = new Texture2D(2, 2);
+      bgTex.hideFlags = HideFlags.HideAndDontSave;
+      bgTex.LoadImage(File.ReadAllBytes("background.png"));
+      Log.LogInfo($"[BG] LoadImage={loaded} size={bgTex.width}x{bgTex.height}");
+      var bgObj = new GameObject("BackgroundCamera");
+      UnityEngine.Object.DontDestroyOnLoad(bgObj);
+      var bgCam = bgObj.AddComponent<Camera>();
+      bgCam.cullingMask = 0; // draws no scene objects
+      bgCam.clearFlags = CameraClearFlags.SolidColor;
+      bgCam.cullingMask = 1 << 31;
+      bgObj.AddComponent<BackgroundImage>().tex = bgTex;
+      bgCam.backgroundColor = Color.magenta;
+    }
+    if (File.Exists("player.png"))
+    {
+      loadCustomPlayerTex = true;
+      playerTex = new Texture2D(2, 2);
+      playerTex.hideFlags = HideFlags.HideAndDontSave;
+      playerTex.LoadImage(File.ReadAllBytes("player.png"));
+    }
     SetupFileWatcher();
 
     Log.LogInfo("Mathbreakers Save Test loaded!");
@@ -114,7 +131,7 @@ public class MBMod : BaseUnityPlugin
         {
           currentMode = parsedMode + 1;
           shouldRestart = true;
-          Log.LogInfo("[FileWatcher] Mode updated to: " + currentMode);
+          Log.LogInfo("[FileWatcher] Mode set to: " + currentMode);
           try
           {
             File.Delete(e.FullPath);
@@ -131,6 +148,81 @@ public class MBMod : BaseUnityPlugin
 
   private void Update()
   {
+    // if (Input.GetKeyDown(KeyCode.F3))
+    // {
+    //   GameObject player = GameObject.FindWithTag("Player");
+    //   Mesh mesh = player.GetComponentInChildren<SkinnedMeshRenderer>().sharedMesh;
+    //   int size = 1024;
+    //   Texture2D t = new Texture2D(size, size);
+    //   Color[] fill = new Color[size * size];
+    //   for (int i = 0; i < fill.Length; i++)
+    //     fill[i] = Color.black;
+    //   t.SetPixels(fill);
+
+    //   Vector2[] uv = mesh.uv;
+    //   int[] tris = mesh.triangles;
+    //   for (int i = 0; i < tris.Length; i += 3)
+    //   {
+    //     for (int e = 0; e < 3; e++)
+    //     {
+    //       Vector2 a = uv[tris[i + e]] * (size - 1);
+    //       Vector2 b = uv[tris[i + (e + 1) % 3]] * (size - 1);
+    //       int steps = (int)Vector2.Distance(a, b) + 1;
+    //       for (int s = 0; s <= steps; s++)
+    //       {
+    //         Vector2 p = Vector2.Lerp(a, b, s / (float)steps);
+    //         t.SetPixel((int)p.x, (int)p.y, Color.white);
+    //       }
+    //     }
+    //   }
+    //   t.Apply();
+    //   File.WriteAllBytes("uv_template.png", t.EncodeToPNG());
+    // }
+    if (Input.GetKeyDown(KeyCode.F5))
+    {
+      GameObject player = GameObject.FindWithTag("Player");
+      SkinnedMeshRenderer smr = player.GetComponentInChildren<SkinnedMeshRenderer>();
+      Material m = smr.material;
+      Mesh mesh = smr.sharedMesh;
+      Log.LogInfo(
+        $"[Player] mesh={mesh.name} verts={mesh.vertexCount} uv={mesh.uv.Length} colors={mesh.colors.Length} bones={smr.bones.Length} rootBone={smr.rootBone}"
+      );
+      Log.LogInfo(
+        $"[Player] _MainTex={m.HasProperty("_MainTex")} _Color={m.HasProperty("_Color")} color={m.color}"
+      );
+      foreach (Transform b in smr.bones)
+        Log.LogInfo($"[Player] bone {b.name}");
+    }
+    if (Input.GetKeyDown(KeyCode.F6))
+    {
+      foreach (Renderer r in hidden)
+        r.enabled = true;
+      hidden.Clear();
+
+      Renderer[] all = FindObjectsOfType(typeof(Renderer)) as Renderer[];
+
+      if (shaderIdx == -1)
+      {
+        var set = new HashSet<string>();
+        foreach (Renderer r in all)
+          set.Add(r.sharedMaterial.shader.name);
+        shaderNames = new string[set.Count];
+        set.CopyTo(shaderNames);
+      }
+
+      shaderIdx = (shaderIdx + 1) % shaderNames.Length;
+      string target = shaderNames[shaderIdx];
+
+      foreach (Renderer r in all)
+      {
+        if (r.sharedMaterial.shader.name == target)
+        {
+          r.enabled = false;
+          hidden.Add(r);
+        }
+      }
+      Log.LogInfo($"[Bisect] hiding {hidden.Count} renderers using '{target}'");
+    }
     if (Input.GetKeyDown(KeyCode.F8))
     {
       foreach (Camera c in Camera.allCameras)
@@ -305,31 +397,38 @@ public class MBMod : BaseUnityPlugin
 
   private void OnLevelWasLoaded(int level)
   {
-    Camera cam = Camera.main;
-    cam.clearFlags = CameraClearFlags.SolidColor;
-    cam.backgroundColor = Color.black;
+    shaderIdx = -1;
+    if (loadCustomSkybox)
+    {
+      Camera cam = Camera.main;
+      cam.clearFlags = CameraClearFlags.SolidColor;
+      cam.backgroundColor = Color.black;
+      GameObject quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+      Destroy(quad.GetComponent<Collider>());
+      quad.transform.parent = cam.transform;
 
-    GameObject quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-    Destroy(quad.GetComponent<Collider>());
-    quad.transform.parent = cam.transform;
+      float d = cam.farClipPlane * 0.999f;
+      float h = 2f * d * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
+      Vector3 s = cam.transform.lossyScale;
 
-    float d = cam.farClipPlane * 0.9f;
-    float h = 2f * d * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
-    Vector3 s = cam.transform.lossyScale;
+      quad.transform.localRotation = Quaternion.identity;
+      quad.transform.localPosition = new Vector3(0f, 0f, d / s.z);
+      quad.transform.localScale = new Vector3(h * cam.aspect / s.x, h / s.y, 1f);
 
-    quad.transform.localRotation = Quaternion.identity;
-    quad.transform.localPosition = new Vector3(0f, 0f, d / s.z);
-    quad.transform.localScale = new Vector3(h * cam.aspect / s.x, h / s.y, 1f);
-
-    Material mat = new Material(Shader.Find("Unlit/Texture"));
-    mat.mainTexture = bgTex;
-    mat.renderQueue = 1000;
-    quad.renderer.material = mat;
-
-    Log.LogInfo(
-      $"[BG] dist={(quad.transform.position - cam.transform.position).magnitude} far={cam.farClipPlane} lossy={s}"
-    );
-
+      Material mat = new Material(Shader.Find("Unlit/Texture"));
+      mat.mainTexture = bgTex;
+      mat.renderQueue = 1000;
+      quad.renderer.material = mat;
+    }
+    if (loadCustomPlayerTex)
+    {
+      GameObject player = GameObject.FindWithTag("Player");
+      SkinnedMeshRenderer smr = player.GetComponentInChildren<SkinnedMeshRenderer>();
+      Material m = smr.material;
+      m.shader = Shader.Find("Diffuse");
+      m.color = Color.white; // Diffuse multiplies by _Color, so the blue would tint your texture
+      m.mainTexture = playerTex;
+    }
     if (showDeaths)
       DeathMarkers.SpawnAll(level);
   }
