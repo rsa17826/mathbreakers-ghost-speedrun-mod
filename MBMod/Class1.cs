@@ -30,6 +30,8 @@ public class MBMod : BaseUnityPlugin
   public static int currentMode = 0;
 
   private static readonly string MaxBadFilePath = "maxBadTime";
+  public static bool loaded;
+  static Texture2D bgTex;
 
   private void Awake()
   {
@@ -65,7 +67,18 @@ public class MBMod : BaseUnityPlugin
         Log.LogError($"Error reading maxBadTime file: {ex.Message}");
       }
     }
-
+    bgTex = new Texture2D(2, 2);
+    bgTex.hideFlags = HideFlags.HideAndDontSave;
+    bgTex.LoadImage(File.ReadAllBytes("background.png")); // relative to game root, like your other files
+    Log.LogInfo($"[BG] LoadImage={loaded} size={bgTex.width}x{bgTex.height}");
+    var bgObj = new GameObject("BackgroundCamera");
+    UnityEngine.Object.DontDestroyOnLoad(bgObj);
+    var bgCam = bgObj.AddComponent<Camera>();
+    bgCam.cullingMask = 0; // draws no scene objects
+    bgCam.clearFlags = CameraClearFlags.SolidColor;
+    bgCam.cullingMask = 1 << 31;
+    bgObj.AddComponent<BackgroundImage>().tex = bgTex;
+    bgCam.backgroundColor = Color.magenta;
     SetupFileWatcher();
 
     Log.LogInfo("Mathbreakers Save Test loaded!");
@@ -118,6 +131,27 @@ public class MBMod : BaseUnityPlugin
 
   private void Update()
   {
+    if (Input.GetKeyDown(KeyCode.F8))
+    {
+      foreach (Camera c in Camera.allCameras)
+      {
+        Log.LogInfo(
+          $"[BG] camera '{c.name}' tag={c.tag} depth={c.depth} clear={c.clearFlags} bg={c.backgroundColor} mask={c.cullingMask} enabled={c.enabled}"
+        );
+      }
+    }
+    if (Input.GetKeyDown(KeyCode.F8))
+    {
+      Renderer[] all = FindObjectsOfType(typeof(Renderer)) as Renderer[];
+      Array.Sort(all, (a, b) => b.bounds.size.magnitude.CompareTo(a.bounds.size.magnitude));
+      for (int i = 0; i < 25 && i < all.Length; i++)
+      {
+        Renderer r = all[i];
+        Log.LogInfo(
+          $"[Sky] {r.name} | parent={r.transform.parent.name} | layer={r.gameObject.layer} | size={r.bounds.size.magnitude} | shader={r.material.shader.name} | queue={r.material.renderQueue}"
+        );
+      }
+    }
     // Execute pending restart requests safely on Unity's main thread
     if (shouldRestart)
     {
@@ -271,6 +305,31 @@ public class MBMod : BaseUnityPlugin
 
   private void OnLevelWasLoaded(int level)
   {
+    Camera cam = Camera.main;
+    cam.clearFlags = CameraClearFlags.SolidColor;
+    cam.backgroundColor = Color.black;
+
+    GameObject quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+    Destroy(quad.GetComponent<Collider>());
+    quad.transform.parent = cam.transform;
+
+    float d = cam.farClipPlane * 0.9f;
+    float h = 2f * d * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
+    Vector3 s = cam.transform.lossyScale;
+
+    quad.transform.localRotation = Quaternion.identity;
+    quad.transform.localPosition = new Vector3(0f, 0f, d / s.z);
+    quad.transform.localScale = new Vector3(h * cam.aspect / s.x, h / s.y, 1f);
+
+    Material mat = new Material(Shader.Find("Unlit/Texture"));
+    mat.mainTexture = bgTex;
+    mat.renderQueue = 1000;
+    quad.renderer.material = mat;
+
+    Log.LogInfo(
+      $"[BG] dist={(quad.transform.position - cam.transform.position).magnitude} far={cam.farClipPlane} lossy={s}"
+    );
+
     if (showDeaths)
       DeathMarkers.SpawnAll(level);
   }
@@ -315,5 +374,15 @@ public static class NumberHoopCheckpoint_Start_Patch
   {
     BoxCollider box = __instance.gameObject.GetComponent<BoxCollider>();
     HitboxMarkers.Create(box, new Color(1f, 0f, 0f, 0.5f));
+  }
+}
+
+public class BackgroundImage : MonoBehaviour
+{
+  public Texture2D tex;
+
+  void OnPostRender()
+  {
+    Graphics.Blit(tex, (RenderTexture)null);
   }
 }
