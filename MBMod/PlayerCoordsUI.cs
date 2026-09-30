@@ -9,7 +9,6 @@ public class PlayerCoordsUI : MonoBehaviour
 {
   public static ManualLogSource Log;
   private Transform playerTransform;
-  private Vector3 lastPlayerPos;
 
   // Expanded window height to fit player pos, two distances, and the best-run delta
   private Rect _windowRect = new Rect(20, 260, 240, 155);
@@ -55,53 +54,20 @@ public class PlayerCoordsUI : MonoBehaviour
 
     // Retrieve velocity from CharacterController, Rigidbody, or positional delta
     CharacterController controller = playerTransform.GetComponent<CharacterController>();
-    if (controller != null)
-    {
-      vel = controller.velocity;
-    }
-    else
-    {
-      Rigidbody rb = playerTransform.GetComponent<Rigidbody>();
-      if (rb != null)
-      {
-        vel = rb.velocity;
-      }
-      else if (dt > 0f)
-      {
-        vel = (playerTransform.position - lastPlayerPos) / dt;
-      }
-    }
-    lastPlayerPos = playerTransform.position;
+    vel = controller.velocity;
 
     PathComparer.Tick(playerTransform.position, playerTransform.rotation, vel);
     UpdateGhost();
   }
 
   private GameObject ghost;
-  private CustomPlayerAnim ghostAnim;
 
   private void UpdateGhost()
   {
     if (ghost == null && PathComparer.HasComparison)
     {
       ghost = CreateGhost(playerTransform.gameObject);
-      if (ghost != null)
-      {
-        ghostAnim = ghost.GetComponentInChildren<CustomPlayerAnim>();
-        if (ghostAnim != null)
-        {
-          ghostAnim.isReplayGhost = true;
-
-          // Re-initialize the animation script so it binds to the clone's bones.
-          SkinnedMeshRenderer smr = ghost.GetComponentInChildren<SkinnedMeshRenderer>();
-          if (smr != null)
-          {
-            ghostAnim.Init(smr, ghost.transform);
-          }
-        }
-      }
     }
-
     if (!PathComparer.IsRunning)
     {
       return;
@@ -116,10 +82,6 @@ public class PlayerCoordsUI : MonoBehaviour
       {
         ghost.transform.position = pos;
         ghost.transform.rotation = rot;
-        if (ghostAnim != null)
-        {
-          ghostAnim.currentGhostVelocity = vel;
-        }
       }
     }
   }
@@ -138,13 +100,9 @@ public class PlayerCoordsUI : MonoBehaviour
     clone.name = "BestRunGhost";
     clone.tag = "Untagged";
 
-    // Keep CustomPlayerAnim if present on sub-objects so the ghost can animate
     foreach (var behaviour in clone.GetComponentsInChildren<MonoBehaviour>())
     {
-      if (!(behaviour is CustomPlayerAnim))
-      {
-        Destroy(behaviour);
-      }
+      Destroy(behaviour);
     }
     foreach (var collider in clone.GetComponentsInChildren<Collider>())
     {
@@ -193,10 +151,12 @@ public class PlayerCoordsUI : MonoBehaviour
       if (player != null)
       {
         playerTransform = player.transform;
-        lastPlayerPos = playerTransform.position;
       }
       else if (PathComparer.IsRunning)
       {
+        // Log.LogInfo(
+        //   "[PathComparer] no player detected, stopping run on level " + Application.loadedLevel
+        // );
         PathComparer.EndRun(false);
       }
     }
