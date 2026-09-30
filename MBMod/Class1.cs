@@ -40,7 +40,7 @@ public class MBMod : BaseUnityPlugin
   static Texture2D playerTex;
   static Mesh customMesh;
   static bool loadCustomPlayer;
-  const float modelScale = 7f;
+  const float modelScale = 5f;
 
   private void Awake()
   {
