@@ -37,10 +37,6 @@ public class MBMod : BaseUnityPlugin
   public static bool loaded;
   public static bool loadCustomSkybox;
   static Texture2D bgTex;
-  static Texture2D playerTex;
-  static Mesh customMesh;
-  static bool loadCustomPlayer;
-  const float modelScale = 5f;
 
   private void Awake()
   {
@@ -93,73 +89,13 @@ public class MBMod : BaseUnityPlugin
       bgCam.backgroundColor = Color.magenta;
     }
     invertShift = File.Exists("invertShift");
-    if (File.Exists("player.obj"))
+    if (File.Exists("player.skin"))
     {
-      loadCustomPlayer = true;
-      playerTex = new Texture2D(2, 2);
-      playerTex.hideFlags = HideFlags.HideAndDontSave;
-      playerTex.LoadImage(File.ReadAllBytes("player.png"));
-      customMesh = LoadObj("player.obj");
-      customMesh.hideFlags = HideFlags.HideAndDontSave;
+      CustomModel.Load("player.skin", "player.anim", "player.png");
     }
     SetupFileWatcher();
 
     Log.LogInfo("Mathbreakers Save Test loaded!");
-  }
-
-  static Mesh LoadObj(string path)
-  {
-    var inv = System.Globalization.CultureInfo.InvariantCulture;
-    var pos = new List<Vector3>();
-    var uvs = new List<Vector2>();
-    var verts = new List<Vector3>();
-    var vertUv = new List<Vector2>();
-    var tris = new List<int>();
-    var map = new Dictionary<string, int>();
-
-    foreach (string line in File.ReadAllLines(path))
-    {
-      string[] p = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-      if (p.Length == 0)
-        continue;
-
-      if (p[0] == "v")
-        pos.Add(
-          new Vector3(-float.Parse(p[1], inv), float.Parse(p[2], inv), float.Parse(p[3], inv))
-        ); // negate x: Unity is left-handed
-      else if (p[0] == "vt")
-        uvs.Add(new Vector2(float.Parse(p[1], inv), float.Parse(p[2], inv)));
-      else if (p[0] == "f")
-      {
-        int[] idx = new int[p.Length - 1];
-        for (int i = 1; i < p.Length; i++)
-        {
-          int id;
-          if (!map.TryGetValue(p[i], out id))
-          {
-            string[] c = p[i].Split('/');
-            id = verts.Count;
-            verts.Add(pos[int.Parse(c[0]) - 1]);
-            vertUv.Add(uvs[int.Parse(c[1]) - 1]); // throws if exported without UVs
-            map[p[i]] = id;
-          }
-          idx[i - 1] = id;
-        }
-        for (int i = 1; i < idx.Length - 1; i++)
-        {
-          tris.Add(idx[0]);
-          tris.Add(idx[i + 1]); // reversed winding to match the negated x
-          tris.Add(idx[i]);
-        }
-      }
-    }
-
-    Mesh m = new Mesh();
-    m.vertices = verts.ToArray();
-    m.uv = vertUv.ToArray();
-    m.triangles = tris.ToArray();
-    m.RecalculateNormals();
-    return m;
   }
 
   private void SetupFileWatcher()
@@ -418,71 +354,9 @@ public class MBMod : BaseUnityPlugin
       mat.renderQueue = 1000;
       quad.renderer.material = mat;
     }
-    if (loadCustomPlayer)
+    if (CustomModel.enabled)
     {
-      GameObject player = GameObject.FindWithTag("Player");
-      SkinnedMeshRenderer smr = player.GetComponentInChildren<SkinnedMeshRenderer>();
-      Mesh old = smr.sharedMesh;
-
-      // Copy so each level load starts from the same source mesh
-      Mesh m = (Mesh)UnityEngine.Object.Instantiate(customMesh);
-      Vector3[] v = m.vertices;
-      Quaternion fix = Quaternion.Euler(90f, 0f, 0f);
-      for (int i = 0; i < v.Length; i++)
-        v[i] = fix * v[i];
-      m.vertices = v;
-      m.RecalculateBounds();
-
-      Bounds ob = old.bounds;
-      Bounds nb = m.bounds;
-
-      float s = ob.size.y / nb.size.y * modelScale;
-      Vector3 srcAnchor = new Vector3(nb.center.x, nb.min.y, nb.center.z);
-      Vector3 dstAnchor = new Vector3(ob.center.x, ob.min.y, ob.center.z);
-      for (int i = 0; i < v.Length; i++)
-        v[i] = (v[i] - srcAnchor) * s + dstAnchor;
-      m.vertices = v;
-      m.RecalculateBounds();
-
-      // Bone positions in mesh space come from the old mesh's bind poses
-      Matrix4x4[] bind = old.bindposes;
-      Vector3[] bonePos = new Vector3[bind.Length];
-      for (int b = 0; b < bind.Length; b++)
-        bonePos[b] = bind[b].inverse.MultiplyPoint3x4(Vector3.zero);
-
-      BoneWeight[] weights = new BoneWeight[v.Length];
-      bool[] isWing = new bool[v.Length];
-      int wingCount = 0;
-      for (int i = 0; i < v.Length; i++)
-      {
-        int best = 0;
-        float bestDist = float.MaxValue;
-        for (int b = 0; b < bonePos.Length; b++)
-        {
-          float d = (v[i] - bonePos[b]).sqrMagnitude;
-          if (d < bestDist)
-          {
-            bestDist = d;
-            best = b;
-          }
-        }
-        weights[i].boneIndex0 = best;
-        weights[i].weight0 = 1f;
-      }
-      m.boneWeights = weights;
-      m.bindposes = bind;
-      Vector3 shift = new Vector3(0f, -1f, 0f);
-      for (int i = 0; i < v.Length; i++)
-        v[i] += shift;
-      m.vertices = v;
-      m.RecalculateBounds();
-      smr.sharedMesh = m;
-
-      Material mat = new Material(Shader.Find("Diffuse"));
-      mat.mainTexture = playerTex;
-      smr.sharedMaterials = new Material[] { mat }; // mat.shader = Shader.Find("Diffuse"); // or "Transparent/Cutout/Diffuse" if the texture has alpha
-      mat.color = Color.white;
-      smr.sharedMaterial = mat;
+      CustomModel.SpawnPlayer(GameObject.FindWithTag("Player"));
     }
     if (showDeaths)
       DeathMarkers.SpawnAll(level);

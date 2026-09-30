@@ -61,6 +61,7 @@ public class PlayerCoordsUI : MonoBehaviour
   }
 
   private GameObject ghost;
+  private CustomPlayerAnim ghostAnim; // null when the custom model is disabled
 
   private void UpdateGhost()
   {
@@ -70,6 +71,10 @@ public class PlayerCoordsUI : MonoBehaviour
     }
     if (!PathComparer.IsRunning)
     {
+      if (ghostAnim != null)
+      {
+        ghostAnim.currentGhostVelocity = Vector3.zero;
+      }
       return;
     }
 
@@ -82,6 +87,10 @@ public class PlayerCoordsUI : MonoBehaviour
       {
         ghost.transform.position = pos;
         ghost.transform.rotation = rot;
+        if (ghostAnim != null)
+        {
+          ghostAnim.currentGhostVelocity = vel;
+        }
       }
     }
   }
@@ -92,6 +101,18 @@ public class PlayerCoordsUI : MonoBehaviour
   // a visual marker.
   private GameObject CreateGhost(GameObject player)
   {
+    if (CustomModel.enabled)
+    {
+      // Fresh copy of the custom model instead of a clone of the player, so it can run its own animations
+      GameObject root = new GameObject("BestRunGhost");
+      root.transform.position = player.transform.position;
+      root.transform.rotation = player.transform.rotation;
+      root.transform.localScale = player.transform.lossyScale;
+      ghostAnim = CustomModel.SpawnGhost(root.transform);
+      MakeTransparent(root, 0.35f);
+      return root;
+    }
+
     var clone = (GameObject)Instantiate(
       player,
       player.transform.position,
