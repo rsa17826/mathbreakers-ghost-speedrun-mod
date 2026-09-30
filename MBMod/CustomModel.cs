@@ -12,17 +12,17 @@ public static class CustomModel
   public static bool enabled;
 
   // Model height relative to the player's CharacterController height
-  const float heightScale = 1.5f;
+  const float heightScale = 1.2f;
 
   // Extra degrees about Y if the model ends up facing the wrong way
   const float yaw = 0f;
 
   // Shifts the model in the player's local axes (x = right, y = up, z = forward). Negative y is down.
-  static readonly Vector3 offset = new Vector3(0f, -0.3f, 9.45f);
+  static readonly Vector3 offset = new Vector3(0f, -0.0f, 5.5f);
 
   // Every animation CustomPlayerAnim can pick must exist in player.anim
-  static readonly string[] requiredClips = { "idle", "walk", "jump", "fly", "fall" };
-
+  static readonly string[] requiredClips = { "idle", "walk", "jump", "fly", "fall", "dying" };
+  public static FPSWalkerEnhanced player;
   const string modelName = "CustomPlayerModel";
 
   struct Key
@@ -356,8 +356,9 @@ public static class CustomModel
 
   // Builds the model on the player, sized and placed to fit its CharacterController, and hides the
   // game's original player mesh.
-  public static CustomPlayerAnim SpawnPlayer(GameObject player)
+  public static CustomPlayerAnim SpawnPlayer(GameObject _player)
   {
+    player = _player.GetComponent<FPSWalkerEnhanced>();
     Transform old = player.transform.Find(modelName);
     if (old != null)
       UnityEngine.Object.Destroy(old.gameObject);
@@ -445,9 +446,9 @@ public class CustomPlayerAnim : MonoBehaviour
   }
 
   // Tune these to your game's units
-  const float walkSpeed = 9f; // horizontal speed above this counts as walking
+  const float walkSpeed = 2f; // horizontal speed above this counts as walking
   const float jumpVel = 1f; // upward speed above this counts as jumping
-  const float fallVel = -2f; // downward speed below this counts as falling
+  const float fallVel = -10f; // downward speed below this counts as falling
   const float walkCyclesPerUnit = 0.07f; // walk clip cycles per unit of distance traveled
   const float fadeTime = 0.1f; // crossfade between animations
 
@@ -484,25 +485,41 @@ public class CustomPlayerAnim : MonoBehaviour
   }
 
   // lastAnimation is the clip picked on the previous frame (null on the first frame)
-  static string ChooseAnimation(PlayerState playerState, string lastAnimation)
+  static string ChooseAnimation(PlayerState playerState, string lastAnimation, Animation anim)
   {
+    if (CustomModel.player.dying)
+    {
+      return "dying";
+    }
+    // if (CustomModel.player.falling){
+    //   return "falling";
+    // }
+    if (CustomModel.player.grounded)
+    {
+      if (playerState == PlayerState.Walk)
+      {
+        return "walk";
+      }
+      return "idle";
+    }
     switch (playerState)
     {
       case PlayerState.Jump:
         switch (lastAnimation)
         {
           case "jump":
+            if (anim["jump"].normalizedTime >= 1)
+            {
+              return "fly";
+            }
+            return "jump";
           case "fly":
             return "fly";
           default:
             return "jump";
         }
-      case PlayerState.Walk:
-        return "walk";
       case PlayerState.Fall:
         return "fall";
-      case PlayerState.Idle:
-        return "idle";
     }
     throw new Exception("unhandled player state " + playerState);
   }
@@ -517,7 +534,7 @@ public class CustomPlayerAnim : MonoBehaviour
     float hSpeed = new Vector3(vel.x, 0f, vel.z).magnitude;
     vy = Mathf.Lerp(vy, vel.y, 1f - Mathf.Exp(-10f * dt));
 
-    string next = ChooseAnimation(GetState(hSpeed, vy), lastAnimation);
+    string next = ChooseAnimation(GetState(hSpeed, vy), lastAnimation, anim);
     if (next != lastAnimation)
     {
       anim.CrossFade(next, fadeTime);
