@@ -12,13 +12,13 @@ public static class CustomModel
   public static bool enabled;
 
   // Model height relative to the player's CharacterController height
-  const float heightScale = 1f;
+  const float heightScale = 1.5f;
 
   // Extra degrees about Y if the model ends up facing the wrong way
   const float yaw = 0f;
 
   // Shifts the model in the player's local axes (x = right, y = up, z = forward). Negative y is down.
-  static readonly Vector3 offset = new Vector3(0f, -0.2f, 6.3f);
+  static readonly Vector3 offset = new Vector3(0f, -0.3f, 9.45f);
 
   // Every animation CustomPlayerAnim can pick must exist in player.anim
   static readonly string[] requiredClips = { "idle", "walk", "jump", "fly", "fall" };
@@ -445,10 +445,10 @@ public class CustomPlayerAnim : MonoBehaviour
   }
 
   // Tune these to your game's units
-  const float walkSpeed = 2f; // horizontal speed above this counts as walking
+  const float walkSpeed = 9f; // horizontal speed above this counts as walking
   const float jumpVel = 1f; // upward speed above this counts as jumping
   const float fallVel = -2f; // downward speed below this counts as falling
-  const float walkCyclesPerUnit = 0.5f; // walk clip cycles per unit of distance traveled
+  const float walkCyclesPerUnit = 0.07f; // walk clip cycles per unit of distance traveled
   const float fadeTime = 0.1f; // crossfade between animations
 
   // Driving mode for Replay/Ghost
