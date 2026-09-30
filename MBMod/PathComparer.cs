@@ -21,6 +21,8 @@ public static class PathComparer
   {
     public float Time;
     public Vector3 Position;
+    public Quaternion Rotation;
+    public Vector3 Velocity;
   }
 
   private static readonly List<PathSample> currentRun = new List<PathSample>();
@@ -60,20 +62,27 @@ public static class PathComparer
   }
 
   /// <summary>
-  /// Looks up (via linear interpolation between the two surrounding samples)
-  /// where the best run was at the given elapsed time. Returns false if
-  /// there's no best run loaded. Clamps to the first/last sample outside
-  /// the recorded range.
+  /// Samples pose (Position, Rotation, Velocity) at the given elapsed time via linear interpolation.
   /// </summary>
-  public static bool TryGetBestPosition(float elapsed, out Vector3 position)
+  public static bool TryGetBestTransform(
+    float elapsed,
+    out Vector3 position,
+    out Quaternion rotation,
+    out Vector3 velocity
+  )
   {
     position = Vector3.zero;
+    rotation = Quaternion.identity;
+    velocity = Vector3.zero;
+
     if (bestRun == null || bestRun.Count == 0)
       return false;
 
     if (elapsed <= bestRun[0].Time)
     {
       position = bestRun[0].Position;
+      rotation = bestRun[0].Rotation;
+      velocity = bestRun[0].Velocity;
       return true;
     }
 
@@ -81,6 +90,8 @@ public static class PathComparer
     if (elapsed >= last.Time)
     {
       position = last.Position;
+      rotation = last.Rotation;
+      velocity = last.Velocity;
       return true;
     }
 
@@ -92,13 +103,25 @@ public static class PathComparer
         var next = bestRun[i];
         float span = next.Time - prev.Time;
         float t = span > 0f ? (elapsed - prev.Time) / span : 0f;
+
         position = Vector3.Lerp(prev.Position, next.Position, t);
+        rotation = Quaternion.Slerp(prev.Rotation, next.Rotation, t);
+        velocity = Vector3.Lerp(prev.Velocity, next.Velocity, t);
         return true;
       }
     }
 
     position = last.Position;
+    rotation = last.Rotation;
+    velocity = last.Velocity;
     return true;
+  }
+
+  public static bool TryGetBestPosition(float elapsed, out Vector3 position)
+  {
+    Quaternion rot;
+    Vector3 vel;
+    return TryGetBestTransform(elapsed, out position, out rot, out vel);
   }
 
   private static string PathFileFor(int level)
@@ -107,7 +130,6 @@ public static class PathComparer
     return "bestpath_level" + level + ".dat";
   }
 
-  /// <summary>Call when a run starts (e.g. from the same code that currently starts the split timer).</summary>
   public static void StartRun(int level)
   {
     currentLevel = level;
@@ -125,23 +147,29 @@ public static class PathComparer
     );
   }
 
-  /// <summary>Call every frame with the player's current position; does nothing if no run is active. Elapsed time is measured internally from StartRun.</summary>
-  public static void Tick(Vector3 position)
+  public static void Tick(Vector3 position, Quaternion rotation, Vector3 velocity)
   {
     if (!IsRunning)
       return;
-    Sample(Time.time - runStartTime, position);
+    Sample(Time.time - runStartTime, position, rotation, velocity);
   }
 
-  /// <summary>Call every frame (e.g. from Update) with seconds elapsed since the run/split started and the player's current position.</summary>
-  public static void Sample(float elapsed, Vector3 position)
+  public static void Sample(float elapsed, Vector3 position, Quaternion rotation, Vector3 velocity)
   {
     if (currentLevel < 0)
       return;
 
     if (elapsed - lastRecordTime >= RecordInterval)
     {
-      currentRun.Add(new PathSample { Time = elapsed, Position = position });
+      currentRun.Add(
+        new PathSample
+        {
+          Time = elapsed,
+          Position = position,
+          Rotation = rotation,
+          Velocity = velocity,
+        }
+      );
       lastRecordTime = elapsed;
     }
 
@@ -151,7 +179,6 @@ public static class PathComparer
     }
   }
 
-  /// <summary>Call when a run ends. Pass completed=true only if the level was actually cleared, so aborted runs never overwrite the best path.</summary>
   public static void EndRun(bool completed)
   {
     MBMod.Log.LogInfo(
@@ -207,7 +234,7 @@ public static class PathComparer
           + thisRunTime
           + "s)"
       );
-      return; // existing best is still equal or faster
+      return;
     }
     SavePath(level, run);
     MBMod.Log.LogInfo(
@@ -232,11 +259,18 @@ public static class PathComparer
         writer.Write(sample.Position.x);
         writer.Write(sample.Position.y);
         writer.Write(sample.Position.z);
+        writer.Write(sample.Rotation.x);
+        writer.Write(sample.Rotation.y);
+        writer.Write(sample.Rotation.z);
+        writer.Write(sample.Rotation.w);
+        writer.Write(sample.Velocity.x);
+        writer.Write(sample.Velocity.y);
+        writer.Write(sample.Velocity.z);
       }
     }
   }
 
-  private static List<PathSample> LoadBestPath(int level)
+  public static List<PathSample> LoadBestPath(int level)
   {
     string path = PathFileFor(level);
     if (!File.Exists(path))
@@ -246,14 +280,64 @@ public static class PathComparer
     {
       int count = reader.ReadInt32();
       var result = new List<PathSample>(count);
+      long expectedBytesLegacy = 4 + (long)count * 16;
+      bool isLegacy = reader.BaseStream.Length == expectedBytesLegacy;
+
       for (int i = 0; i < count; i++)
       {
         float t = reader.ReadSingle();
         float x = reader.ReadSingle();
         float y = reader.ReadSingle();
         float z = reader.ReadSingle();
-        result.Add(new PathSample { Time = t, Position = new Vector3(x, y, z) });
+
+        Quaternion rot = Quaternion.identity;
+        Vector3 vel = Vector3.zero;
+
+        if (!isLegacy)
+        {
+          float rx = reader.ReadSingle();
+          float ry = reader.ReadSingle();
+          float rz = reader.ReadSingle();
+          float rw = reader.ReadSingle();
+          rot = new Quaternion(rx, ry, rz, rw);
+
+          float vx = reader.ReadSingle();
+          float vy = reader.ReadSingle();
+          float vz = reader.ReadSingle();
+          vel = new Vector3(vx, vy, vz);
+        }
+
+        result.Add(
+          new PathSample
+          {
+            Time = t,
+            Position = new Vector3(x, y, z),
+            Rotation = rot,
+            Velocity = vel,
+          }
+        );
       }
+
+      // Infer velocity if missing on older files
+      if (isLegacy && result.Count > 1)
+      {
+        for (int i = 0; i < result.Count; i++)
+        {
+          Vector3 velocityCalculated = Vector3.zero;
+          if (i > 0)
+          {
+            float dt = result[i].Time - result[i - 1].Time;
+            if (dt > 0.0001f)
+            {
+              velocityCalculated = (result[i].Position - result[i - 1].Position) / dt;
+            }
+          }
+          var s = result[i];
+          s.Velocity = velocityCalculated;
+          result[i] = s;
+        }
+      }
+
       return result;
     }
   }

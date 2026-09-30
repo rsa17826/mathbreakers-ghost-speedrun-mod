@@ -17,6 +17,7 @@ public class MBMod : BaseUnityPlugin
   public static HashSet<string> unlockedWeapons = new HashSet<string>();
   public static float maxBad = 0f;
   public static bool showDeaths = false;
+  public static bool invertShift = false;
 
   public static ManualLogSource Log;
   public KeyCode DumpKey = KeyCode.F9;
@@ -91,6 +92,7 @@ public class MBMod : BaseUnityPlugin
       bgObj.AddComponent<BackgroundImage>().tex = bgTex;
       bgCam.backgroundColor = Color.magenta;
     }
+    invertShift=File.Exists("invertShift");
     if (File.Exists("player.obj"))
     {
       loadCustomPlayer = true;
@@ -661,6 +663,11 @@ public class CustomPlayerAnim : MonoBehaviour
   Transform frame; // stays unrotated by us, so the axis is stable
   Vector3 sideLocal; // model's sideways axis in frame's local space
   Transform tracked;
+
+  // Driving mode for Replay/Ghost
+  public bool isReplayGhost = false;
+  public Vector3 currentGhostVelocity;
+
   Transform body,
     neck,
     head,
@@ -692,13 +699,15 @@ public class CustomPlayerAnim : MonoBehaviour
   {
     Vector3 worldAxis = frame.TransformDirection(sideLocal);
     Vector3 parentAxis = Quaternion.Inverse(bone.parent.rotation) * worldAxis;
-    return Quaternion.AngleAxis(deg * pitchSign, parentAxis) * rest;
+    return Quaternion.AngleAxis(deg * pitchSign, parentAxis) * rest; // Ensure rest is Quaternion
   }
 
   public void Init(SkinnedMeshRenderer smr, Transform trackedPlayer)
   {
     tracked = trackedPlayer;
-    lastPos = tracked.position;
+    if (tracked != null)
+      lastPos = tracked.position;
+
     foreach (Transform b in smr.bones)
     {
       switch (b.name)
@@ -737,10 +746,23 @@ public class CustomPlayerAnim : MonoBehaviour
   {
     float dt = Time.deltaTime;
     if (dt <= 0f)
-      return; // paused
+      return;
 
-    Vector3 vel = (tracked.position - lastPos) / dt;
-    lastPos = tracked.position;
+    Vector3 vel;
+    if (isReplayGhost)
+    {
+      vel = currentGhostVelocity;
+    }
+    else if (tracked != null)
+    {
+      vel = (tracked.position - lastPos) / dt;
+      lastPos = tracked.position;
+    }
+    else
+    {
+      vel = Vector3.zero;
+    }
+
     float hSpeed = new Vector3(vel.x, 0f, vel.z).magnitude;
     vy = Mathf.Lerp(vy, vel.y, 1f - Mathf.Exp(-10f * dt));
 
@@ -805,4 +827,16 @@ public class CustomPlayerAnim : MonoBehaviour
     armR.localRotation = Roll(armR, Pitch(armR, restArmR, armRDeg), wingRoll);
     armL.localRotation = Roll(armL, Pitch(armL, restArmL, armLDeg), -wingRoll);
   }
+}
+
+[HarmonyPatch(typeof(Input), nameof(Input.GetKey), new Type[] { typeof(KeyCode) })]
+public static class Input_GetKey_Patch
+{
+    public static void Postfix(KeyCode key, ref bool __result)
+    {
+        if (key == KeyCode.LeftShift && MBMod.invertShift)
+        {
+            __result = !__result;
+        }
+    }
 }
