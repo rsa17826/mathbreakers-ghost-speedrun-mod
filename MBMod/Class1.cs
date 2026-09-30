@@ -539,7 +539,7 @@ public class MBMod : BaseUnityPlugin
       m.SetTriangles(wingTris.ToArray(), 1);
       m.boneWeights = weights;
       m.bindposes = bind;
-      Vector3 shift = new Vector3(0f, -1f, 0f);
+      Vector3 shift = new Vector3(0f, -1f, 15f);
       for (int i = 0; i < v.Length; i++)
         v[i] += shift;
       m.vertices = v;
