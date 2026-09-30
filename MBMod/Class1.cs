@@ -473,23 +473,93 @@ public class MBMod : BaseUnityPlugin
       for (int b = 0; b < bind.Length; b++)
         bonePos[b] = bind[b].inverse.MultiplyPoint3x4(Vector3.zero);
 
+      int iBody = -1,
+        iHead = -1,
+        iArmR = -1,
+        iArmL = -1;
+      for (int b = 0; b < smr.bones.Length; b++)
+      {
+        string n = smr.bones[b].name;
+        if (n == "body")
+          iBody = b;
+        else if (n == "head")
+          iHead = b;
+        else if (n == "arm_right")
+          iArmR = b;
+        else if (n == "arm_left")
+          iArmL = b;
+      }
+      if (iBody < 0 || iHead < 0 || iArmR < 0 || iArmL < 0)
+        throw new Exception("player is missing one of body/head/arm_right/arm_left");
+
+      string[] wb = File.ReadAllText("wingbox.txt")
+        .Split(new[] { ' ', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+      if (wb.Length != 5)
+        throw new Exception("wingbox.txt needs 5 numbers: yMin yMax zMin zMax sideMin");
+      var ci = System.Globalization.CultureInfo.InvariantCulture;
+      float yMin = float.Parse(wb[0], ci),
+        yMax = float.Parse(wb[1], ci),
+        zMin = float.Parse(wb[2], ci),
+        zMax = float.Parse(wb[3], ci),
+        sideMin = float.Parse(wb[4], ci);
+
+      Vector3 armSpan = bonePos[iArmR] - bonePos[iArmL];
+      Log.LogInfo($"[Player] arm span direction={armSpan.normalized} (should be about +/-1 on x)");
+
+      Bounds bb = m.bounds;
       BoneWeight[] weights = new BoneWeight[v.Length];
+      bool[] isWing = new bool[v.Length];
+      int wingCount = 0;
       for (int i = 0; i < v.Length; i++)
       {
-        int best = 0;
-        float bestDist = float.MaxValue;
-        for (int b = 0; b < bonePos.Length; b++)
+        Vector3 n = new Vector3(
+          (v[i].x - bb.min.x) / bb.size.x,
+          (v[i].y - bb.min.y) / bb.size.y,
+          (v[i].z - bb.min.z) / bb.size.z
+        );
+        float side = Mathf.Abs(n.x - 0.5f) * 2f;
+        isWing[i] = n.y >= yMin && n.y <= yMax && n.z >= zMin && n.z <= zMax && side >= sideMin;
+
+        int best = -1;
+        if (isWing[i])
         {
-          float d = (v[i] - bonePos[b]).sqrMagnitude;
-          if (d < bestDist)
+          best = Vector3.Dot(v[i] - bb.center, armSpan) > 0f ? iArmR : iArmL;
+          wingCount++;
+        }
+        else
+        {
+          float bestDist = float.MaxValue;
+          for (int b = 0; b < bonePos.Length; b++)
           {
-            bestDist = d;
-            best = b;
+            if (b == iArmR || b == iArmL)
+              continue;
+            float d = (v[i] - bonePos[b]).sqrMagnitude;
+            if (d < bestDist)
+            {
+              bestDist = d;
+              best = b;
+            }
           }
         }
         weights[i].boneIndex0 = best;
         weights[i].weight0 = 1f;
       }
+      Log.LogInfo($"[Player] {wingCount}/{v.Length} vertices in wing region");
+
+      // Split into two submeshes so the wing region can be shown in a different color
+      int[] tri = m.triangles;
+      List<int> bodyTris = new List<int>();
+      List<int> wingTris = new List<int>();
+      for (int t = 0; t < tri.Length; t += 3)
+      {
+        List<int> dst = isWing[tri[t]] ? wingTris : bodyTris;
+        dst.Add(tri[t]);
+        dst.Add(tri[t + 1]);
+        dst.Add(tri[t + 2]);
+      }
+      m.subMeshCount = 2;
+      m.SetTriangles(bodyTris.ToArray(), 0);
+      m.SetTriangles(wingTris.ToArray(), 1);
       m.boneWeights = weights;
       m.bindposes = bind;
       Vector3 shift = new Vector3(0f, -1f, 0f);
@@ -501,9 +571,17 @@ public class MBMod : BaseUnityPlugin
 
       Material mat = new Material(Shader.Find("Diffuse"));
       mat.mainTexture = playerTex;
-      smr.sharedMaterials = new Material[] { mat }; // mat.shader = Shader.Find("Diffuse"); // or "Transparent/Cutout/Diffuse" if the texture has alpha
       mat.color = Color.white;
-      smr.sharedMaterial = mat;
+
+      Material wingMat = mat;
+      if (File.Exists("wingdebug"))
+      {
+        wingMat = new Material(Shader.Find("Diffuse"));
+        wingMat.color = Color.red;
+      }
+      smr.sharedMaterials = new Material[] { mat, wingMat };
+      CustomPlayerAnim anim = smr.gameObject.AddComponent<CustomPlayerAnim>();
+      anim.Init(smr, player.transform);
     }
     if (showDeaths)
       DeathMarkers.SpawnAll(level);
@@ -559,5 +637,172 @@ public class BackgroundImage : MonoBehaviour
   void OnPostRender()
   {
     Graphics.Blit(tex, (RenderTexture)null);
+  }
+}
+
+public class CustomPlayerAnim : MonoBehaviour
+{
+  // Tune these to your game's units
+  const float runSpeed = 2f; // horizontal speed above this counts as running
+  const float jumpVel = 1f; // upward speed above this counts as jumping
+  const float fallVel = -2f; // downward speed below this counts as falling
+  const float stride = 0.5f; // swing cycles per unit of distance traveled
+
+  // Bone-local axes. The rig's axes are unknown, so change these if a limb rotates the wrong way.
+  // +1 or -1: flip if raised arms go down instead of up
+  const float pitchSign = 1f;
+  const float flapSign = 1f;
+
+  Vector3 forwardLocal;
+  float flapPhase,
+    flapAmp,
+    flapBase,
+    flapRate;
+  Transform frame; // stays unrotated by us, so the axis is stable
+  Vector3 sideLocal; // model's sideways axis in frame's local space
+  Transform tracked;
+  Transform body,
+    neck,
+    head,
+    armR,
+    armL;
+  Quaternion restBody,
+    restNeck,
+    restHead,
+    restArmR,
+    restArmL;
+  Vector3 lastPos;
+  float vy,
+    phase;
+  float lean,
+    headPitch,
+    armRDeg,
+    armLDeg;
+
+  // Rotates bone about the model's front-to-back axis, on top of baseRot
+  Quaternion Roll(Transform bone, Quaternion baseRot, float deg)
+  {
+    Vector3 worldAxis = frame.TransformDirection(forwardLocal);
+    Vector3 parentAxis = Quaternion.Inverse(bone.parent.rotation) * worldAxis;
+    return Quaternion.AngleAxis(deg * flapSign, parentAxis) * baseRot;
+  }
+
+  // Rotates bone about the model's sideways axis by deg, on top of its rest pose
+  Quaternion Pitch(Transform bone, Quaternion rest, float deg)
+  {
+    Vector3 worldAxis = frame.TransformDirection(sideLocal);
+    Vector3 parentAxis = Quaternion.Inverse(bone.parent.rotation) * worldAxis;
+    return Quaternion.AngleAxis(deg * pitchSign, parentAxis) * rest;
+  }
+
+  public void Init(SkinnedMeshRenderer smr, Transform trackedPlayer)
+  {
+    tracked = trackedPlayer;
+    lastPos = tracked.position;
+    foreach (Transform b in smr.bones)
+    {
+      switch (b.name)
+      {
+        case "body":
+          body = b;
+          restBody = b.localRotation;
+          break;
+        case "neck":
+          neck = b;
+          restNeck = b.localRotation;
+          break;
+        case "head":
+          head = b;
+          restHead = b.localRotation;
+          break;
+        case "arm_right":
+          armR = b;
+          restArmR = b.localRotation;
+          break;
+        case "arm_left":
+          armL = b;
+          restArmL = b.localRotation;
+          break;
+        default:
+          throw new Exception("unexpected bone " + b.name);
+      }
+    }
+    frame = body.parent;
+    sideLocal = frame.InverseTransformDirection((armR.position - armL.position).normalized);
+    Vector3 upLocal = frame.InverseTransformDirection((head.position - body.position).normalized);
+    forwardLocal = Vector3.Cross(sideLocal, upLocal).normalized;
+  }
+
+  void LateUpdate()
+  {
+    float dt = Time.deltaTime;
+    if (dt <= 0f)
+      return; // paused
+
+    Vector3 vel = (tracked.position - lastPos) / dt;
+    lastPos = tracked.position;
+    float hSpeed = new Vector3(vel.x, 0f, vel.z).magnitude;
+    vy = Mathf.Lerp(vy, vel.y, 1f - Mathf.Exp(-10f * dt));
+
+    float t = Time.time;
+    float tLean,
+      tHead,
+      tArmR,
+      tArmL;
+    float tAmp = 0f,
+      tBase = 0f,
+      tRate = 0f;
+    if (vy > jumpVel) // JUMP: wings flap
+    {
+      tLean = -8f;
+      tHead = -10f;
+      tArmR = 0f;
+      tArmL = 0f;
+      tAmp = 35f;
+      tBase = 25f;
+      tRate = 18f;
+    }
+    else if (vy < fallVel) // FALL: wings held up, fluttering fast
+    {
+      tLean = 5f;
+      tHead = 10f;
+      tArmR = 0f;
+      tArmL = 0f;
+      tAmp = 15f;
+      tBase = 45f;
+      tRate = 30f;
+    }
+    else if (hSpeed > runSpeed) // RUN: opposite arm swing, forward lean
+    {
+      phase += hSpeed * stride * dt * Mathf.PI * 2f;
+      float swing = Mathf.Sin(phase) * 45f;
+      tLean = 12f;
+      tHead = -6f;
+      tArmR = swing;
+      tArmL = -swing;
+    }
+    else // IDLE: slow breathing sway
+    {
+      float sway = Mathf.Sin(t * 1.5f);
+      tLean = 0f;
+      tHead = sway * 3f;
+      tArmR = sway * 4f;
+      tArmL = -sway * 4f;
+    }
+    float k = 1f - Mathf.Exp(-12f * dt); // smoothing so state changes blend
+    flapAmp = Mathf.Lerp(flapAmp, tAmp, k);
+    flapBase = Mathf.Lerp(flapBase, tBase, k);
+    flapRate = Mathf.Lerp(flapRate, tRate, k);
+    flapPhase += flapRate * dt;
+    float wingRoll = flapBase + Mathf.Sin(flapPhase) * flapAmp;
+    lean = Mathf.Lerp(lean, tLean, k);
+    headPitch = Mathf.Lerp(headPitch, tHead, k);
+    armRDeg = Mathf.Lerp(armRDeg, tArmR, k);
+    armLDeg = Mathf.Lerp(armLDeg, tArmL, k);
+
+    body.localRotation = Pitch(body, restBody, lean);
+    head.localRotation = Pitch(head, restHead, headPitch);
+    armR.localRotation = Roll(armR, Pitch(armR, restArmR, armRDeg), wingRoll);
+    armL.localRotation = Roll(armL, Pitch(armL, restArmL, armLDeg), -wingRoll);
   }
 }

@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+# Enable job control so background jobs get their own process group
+set -m
+
+while :; do
+  if ./compile; then
+    ./start &
+    a=$!
+    read -r _
+    # Send SIGTERM/SIGKILL to the entire process group
+    kill -TERM -$a 2>/dev/null
+    kill -9 -$a 2>/dev/null
+  else
+    read -r _
+  fi
+done

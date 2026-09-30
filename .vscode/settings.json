@@ -1,0 +1,22 @@
+{
+  "files.exclude": {
+    "**/*.dat": true,
+    "**/level*": true,
+    "**/*.assets": true,
+    "**/*.png": true,
+    "**/*doorstop*": true,
+    "**/*.exe": true,
+    "**/*.desktop": true,
+    "**/*.reg": true,
+    "**/PlayerConnectionConfigFile": true,
+    "**/Mono": true,
+    "**/Managed": true,
+    "**/Resources": true,
+    "**/BepInEx": true,
+    "**/mainData": true,
+    "**/bin": true,
+    "**/obj": true,
+    "**/*.dll": true,
+    "**/*.obj": true
+  }
+}
