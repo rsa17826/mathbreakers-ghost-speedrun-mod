@@ -92,7 +92,7 @@ public class MBMod : BaseUnityPlugin
       bgObj.AddComponent<BackgroundImage>().tex = bgTex;
       bgCam.backgroundColor = Color.magenta;
     }
-    invertShift=File.Exists("invertShift");
+    invertShift = File.Exists("invertShift");
     if (File.Exists("player.obj"))
     {
       loadCustomPlayer = true;
@@ -619,63 +619,51 @@ public class BackgroundImage : MonoBehaviour
 
 public class CustomPlayerAnim : MonoBehaviour
 {
+  // Clips come from this file (game dir). See player.anim for the format.
+  const string animFile = "player.anim";
+
   // Tune these to your game's units
-  const float runSpeed = 2f; // horizontal speed above this counts as running
+  const float runSpeed = 2f; // horizontal speed above this counts as walking/running
   const float jumpVel = 1f; // upward speed above this counts as jumping
   const float fallVel = -2f; // downward speed below this counts as falling
-  const float stride = 0.5f; // swing cycles per unit of distance traveled
+  const float stride = 0.5f; // run cycles per unit of distance traveled
+  const float fadeTime = 0.1f; // crossfade between states
 
-  // Bone-local axes. The rig's axes are unknown, so change these if a limb rotates the wrong way.
-  // +1 or -1: flip if raised arms go down instead of up
+  // +1 or -1: flip if a pitch/roll in the file rotates the wrong way
   const float pitchSign = 1f;
   const float flapSign = 1f;
 
-  Vector3 forwardLocal;
-  float flapPhase,
-    flapAmp,
-    flapBase,
-    flapRate;
-  Transform frame; // stays unrotated by us, so the axis is stable
-  Vector3 sideLocal; // model's sideways axis in frame's local space
-  Transform tracked;
+  struct Key
+  {
+    public float time,
+      pitch,
+      yaw,
+      roll;
+  }
+
+  class ClipDef
+  {
+    public string name;
+    public bool loop;
+    public Dictionary<string, List<Key>> bones = new Dictionary<string, List<Key>>();
+  }
 
   // Driving mode for Replay/Ghost
   public bool isReplayGhost = false;
   public Vector3 currentGhostVelocity;
 
-  Transform body,
-    neck,
-    head,
-    armR,
-    armL;
-  Quaternion restBody,
-    restNeck,
-    restHead,
-    restArmR,
-    restArmL;
+  Animation anim;
+  Transform tracked;
+  Transform frame; // parent of the bones
+  Quaternion modelBasis = Quaternion.identity;
+  Dictionary<string, Transform> bones = new Dictionary<string, Transform>();
+  Dictionary<string, Quaternion> rest = new Dictionary<string, Quaternion>();
   Vector3 lastPos;
-  float vy,
-    phase;
-  float lean,
-    headPitch,
-    armRDeg,
-    armLDeg;
+  float vy;
 
-  // Rotates bone about the model's front-to-back axis, on top of baseRot
-  Quaternion Roll(Transform bone, Quaternion baseRot, float deg)
-  {
-    Vector3 worldAxis = frame.TransformDirection(forwardLocal);
-    Vector3 parentAxis = Quaternion.Inverse(bone.parent.rotation) * worldAxis;
-    return Quaternion.AngleAxis(deg * flapSign, parentAxis) * baseRot;
-  }
-
-  // Rotates bone about the model's sideways axis by deg, on top of its rest pose
-  Quaternion Pitch(Transform bone, Quaternion rest, float deg)
-  {
-    Vector3 worldAxis = frame.TransformDirection(sideLocal);
-    Vector3 parentAxis = Quaternion.Inverse(bone.parent.rotation) * worldAxis;
-    return Quaternion.AngleAxis(deg * pitchSign, parentAxis) * rest; // Ensure rest is Quaternion
-  }
+  string playerState = "idle";
+  string lastState = "idle";
+  string currentAnim = "idle";
 
   public void Init(SkinnedMeshRenderer smr, Transform trackedPlayer)
   {
@@ -683,38 +671,194 @@ public class CustomPlayerAnim : MonoBehaviour
     if (tracked != null)
       lastPos = tracked.position;
 
-    foreach (Transform b in smr.bones)
+    // Identify model root / frame
+    if (smr.bones.Length > 0 && smr.bones[0] != null)
     {
-      switch (b.name)
+      frame = smr.bones[0].parent;
+    }
+    if (frame == null)
+      frame = smr.transform;
+
+    // Dynamically index ALL bones/transforms in the model hierarchy
+    Transform[] allTransforms = frame.GetComponentsInChildren<Transform>(true);
+    foreach (Transform t in allTransforms)
+    {
+      if (!bones.ContainsKey(t.name))
       {
-        case "body":
-          body = b;
-          restBody = b.localRotation;
-          break;
-        case "neck":
-          neck = b;
-          restNeck = b.localRotation;
-          break;
-        case "head":
-          head = b;
-          restHead = b.localRotation;
-          break;
-        case "arm_right":
-          armR = b;
-          restArmR = b.localRotation;
-          break;
-        case "arm_left":
-          armL = b;
-          restArmL = b.localRotation;
-          break;
-        default:
-          throw new Exception("unexpected bone " + b.name);
+        bones[t.name] = t;
+        rest[t.name] = t.localRotation;
       }
     }
-    frame = body.parent;
-    sideLocal = frame.InverseTransformDirection((armR.position - armL.position).normalized);
-    Vector3 upLocal = frame.InverseTransformDirection((head.position - body.position).normalized);
-    forwardLocal = Vector3.Cross(sideLocal, upLocal).normalized;
+
+    // Calculate model basis if default bones exist; fallback to identity for custom rigs
+    if (
+      bones.ContainsKey("arm_right")
+      && bones.ContainsKey("arm_left")
+      && bones.ContainsKey("head")
+      && bones.ContainsKey("body")
+    )
+    {
+      Vector3 sideLocal = frame.InverseTransformDirection(
+        (bones["arm_right"].position - bones["arm_left"].position).normalized
+      );
+      Vector3 upLocal = frame.InverseTransformDirection(
+        (bones["head"].position - bones["body"].position).normalized
+      );
+      Vector3 forwardLocal = Vector3.Cross(sideLocal, upLocal).normalized;
+      modelBasis = Quaternion.LookRotation(forwardLocal, upLocal);
+    }
+    else
+    {
+      modelBasis = Quaternion.identity;
+    }
+
+    anim = frame.gameObject.GetComponent<Animation>();
+    if (anim == null)
+      anim = frame.gameObject.AddComponent<Animation>();
+
+    anim.cullingType = AnimationCullingType.AlwaysAnimate;
+
+    if (File.Exists(animFile))
+    {
+      List<ClipDef> clipDefs = ParseAnimFile(animFile);
+      foreach (ClipDef def in clipDefs)
+      {
+        AnimationClip clip = BuildClip(def);
+        if (clip != null)
+          anim.AddClip(clip, def.name);
+      }
+    }
+    else
+    {
+      MBMod.Log.LogWarning("[CustomPlayerAnim] " + animFile + " not found!");
+    }
+  }
+
+  static List<ClipDef> ParseAnimFile(string path)
+  {
+    var ci = System.Globalization.CultureInfo.InvariantCulture;
+    List<ClipDef> defs = new List<ClipDef>();
+    ClipDef clip = null;
+    List<Key> keys = null;
+    string[] lines = File.ReadAllLines(path);
+    for (int n = 0; n < lines.Length; n++)
+    {
+      string line = lines[n].Trim();
+      if (line.Length == 0 || line[0] == '#')
+        continue;
+      string[] p = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+      try
+      {
+        if (p[0] == "clip")
+        {
+          if (p.Length != 3 || (p[2] != "loop" && p[2] != "once"))
+            throw new Exception("expected 'clip <name> <loop|once>'");
+          clip = new ClipDef { name = p[1], loop = p[2] == "loop" };
+          defs.Add(clip);
+        }
+        else if (p[0] == "bone")
+        {
+          if (p.Length != 2)
+            throw new Exception("expected 'bone <name>'");
+          keys = new List<Key>();
+          clip.bones.Add(p[1], keys);
+        }
+        else
+        {
+          if (p.Length != 4)
+            throw new Exception("expected '<time> <pitch> <yaw> <roll>'");
+          keys.Add(
+            new Key
+            {
+              time = float.Parse(p[0], ci),
+              pitch = float.Parse(p[1], ci),
+              yaw = float.Parse(p[2], ci),
+              roll = float.Parse(p[3], ci),
+            }
+          );
+        }
+      }
+      catch (Exception e)
+      {
+        throw new Exception(path + ":" + (n + 1) + ": " + e.Message, e);
+      }
+    }
+    return defs;
+  }
+
+  AnimationClip BuildClip(ClipDef def)
+  {
+    AnimationClip clip = new AnimationClip();
+    clip.name = def.name;
+    clip.wrapMode = def.loop ? WrapMode.Loop : WrapMode.ClampForever;
+
+    foreach (KeyValuePair<string, List<Key>> kv in def.bones)
+    {
+      if (!bones.ContainsKey(kv.Key))
+      {
+        MBMod.Log.LogWarning(
+          "[CustomPlayerAnim] Skipping bone '"
+            + kv.Key
+            + "' in clip '"
+            + def.name
+            + "' (not found on model)."
+        );
+        continue;
+      }
+      Transform bone = bones[kv.Key];
+
+      Quaternion m = Quaternion.Inverse(bone.parent.rotation) * frame.rotation * modelBasis;
+
+      AnimationCurve[] c =
+      {
+        new AnimationCurve(),
+        new AnimationCurve(),
+        new AnimationCurve(),
+        new AnimationCurve(),
+      };
+      Quaternion prev = Quaternion.identity;
+      foreach (Key k in kv.Value)
+      {
+        Quaternion delta =
+          Quaternion.AngleAxis(k.roll * flapSign, Vector3.forward)
+          * Quaternion.AngleAxis(k.pitch * pitchSign, Vector3.right)
+          * Quaternion.AngleAxis(k.yaw, Vector3.up);
+        Quaternion q = m * delta * Quaternion.Inverse(m) * rest[kv.Key];
+
+        if (c[0].length > 0 && Quaternion.Dot(prev, q) < 0f)
+          q = new Quaternion(-q.x, -q.y, -q.z, -q.w);
+        prev = q;
+
+        c[0].AddKey(k.time, q.x);
+        c[1].AddKey(k.time, q.y);
+        c[2].AddKey(k.time, q.z);
+        c[3].AddKey(k.time, q.w);
+      }
+      foreach (AnimationCurve curve in c)
+      {
+        for (int i = 0; i < curve.length; i++)
+          curve.SmoothTangents(i, 0f);
+      }
+
+      string path = PathFromFrame(bone);
+      clip.SetCurve(path, typeof(Transform), "localRotation.x", c[0]);
+      clip.SetCurve(path, typeof(Transform), "localRotation.y", c[1]);
+      clip.SetCurve(path, typeof(Transform), "localRotation.z", c[2]);
+      clip.SetCurve(path, typeof(Transform), "localRotation.w", c[3]);
+    }
+    return clip;
+  }
+
+  string PathFromFrame(Transform bone)
+  {
+    if (bone == frame)
+      return "";
+    string path = bone.name;
+    for (Transform t = bone.parent; t != null && t != frame; t = t.parent)
+    {
+      path = t.name + "/" + path;
+    }
+    return path;
   }
 
   void LateUpdate()
@@ -741,77 +885,81 @@ public class CustomPlayerAnim : MonoBehaviour
     float hSpeed = new Vector3(vel.x, 0f, vel.z).magnitude;
     vy = Mathf.Lerp(vy, vel.y, 1f - Mathf.Exp(-10f * dt));
 
-    float t = Time.time;
-    float tLean,
-      tHead,
-      tArmR,
-      tArmL;
-    float tAmp = 0f,
-      tBase = 0f,
-      tRate = 0f;
-    if (vy > jumpVel) // JUMP: wings flap
-    {
-      tLean = -8f;
-      tHead = -10f;
-      tArmR = 0f;
-      tArmL = 0f;
-      tAmp = 35f;
-      tBase = 25f;
-      tRate = 18f;
-    }
-    else if (vy < fallVel) // FALL: wings held up, fluttering fast
-    {
-      tLean = 5f;
-      tHead = 10f;
-      tArmR = 0f;
-      tArmL = 0f;
-      tAmp = 15f;
-      tBase = 45f;
-      tRate = 30f;
-    }
-    else if (hSpeed > runSpeed) // RUN: opposite arm swing, forward lean
-    {
-      phase += hSpeed * stride * dt * Mathf.PI * 2f;
-      float swing = Mathf.Sin(phase) * 45f;
-      tLean = 12f;
-      tHead = -6f;
-      tArmR = swing;
-      tArmL = -swing;
-    }
-    else // IDLE: slow breathing sway
-    {
-      float sway = Mathf.Sin(t * 1.5f);
-      tLean = 0f;
-      tHead = sway * 3f;
-      tArmR = sway * 4f;
-      tArmL = -sway * 4f;
-    }
-    float k = 1f - Mathf.Exp(-12f * dt); // smoothing so state changes blend
-    flapAmp = Mathf.Lerp(flapAmp, tAmp, k);
-    flapBase = Mathf.Lerp(flapBase, tBase, k);
-    flapRate = Mathf.Lerp(flapRate, tRate, k);
-    flapPhase += flapRate * dt;
-    float wingRoll = flapBase + Mathf.Sin(flapPhase) * flapAmp;
-    lean = Mathf.Lerp(lean, tLean, k);
-    headPitch = Mathf.Lerp(headPitch, tHead, k);
-    armRDeg = Mathf.Lerp(armRDeg, tArmR, k);
-    armLDeg = Mathf.Lerp(armLDeg, tArmL, k);
+    // Determine current physical player state
+    if (vy > jumpVel)
+      playerState = "jump";
+    else if (vy < fallVel)
+      playerState = "fall";
+    else if (hSpeed > runSpeed)
+      playerState = "walk";
+    else
+      playerState = "idle";
 
-    body.localRotation = Pitch(body, restBody, lean);
-    head.localRotation = Pitch(head, restHead, headPitch);
-    armR.localRotation = Roll(armR, Pitch(armR, restArmR, armRDeg), wingRoll);
-    armL.localRotation = Roll(armL, Pitch(armL, restArmL, armLDeg), -wingRoll);
+    // State machine animation resolution
+    string nextAnimation = "idle";
+
+    switch (playerState)
+    {
+      case "jump":
+        switch (lastState)
+        {
+          case "jump":
+          case "fly":
+            nextAnimation = "fly";
+            break;
+          default:
+            nextAnimation = "jump";
+            break;
+        }
+        break;
+
+      case "walk":
+        nextAnimation = "walk";
+        break;
+
+      case "fall":
+        nextAnimation = "fall";
+        break;
+
+      default:
+        nextAnimation = "idle";
+        break;
+    }
+
+    // Safety check: Fall back gracefully if a requested clip doesn't exist
+    if (anim[nextAnimation] == null)
+    {
+      if (nextAnimation == "fly" && anim["jump"] != null)
+        nextAnimation = "jump";
+      else if (nextAnimation == "walk" && anim["run"] != null)
+        nextAnimation = "run";
+      else if (anim["idle"] != null)
+        nextAnimation = "idle";
+    }
+
+    // Crossfade to new animation when state changes
+    if (nextAnimation != currentAnim)
+    {
+      lastState = playerState;
+      currentAnim = nextAnimation;
+      if (anim[currentAnim] != null)
+        anim.CrossFade(currentAnim, fadeTime);
+    }
+
+    // Scale movement animation speed by player movement speed
+    if ((currentAnim == "walk" || currentAnim == "run") && anim[currentAnim] != null)
+      anim[currentAnim].speed = hSpeed * stride * anim[currentAnim].length;
   }
 }
 
 [HarmonyPatch(typeof(Input), nameof(Input.GetKey), new Type[] { typeof(KeyCode) })]
 public static class Input_GetKey_Patch
 {
-    public static void Postfix(KeyCode key, ref bool __result)
+  public static void Postfix(KeyCode key, ref bool __result)
+  {
+    if (key == KeyCode.LeftShift && MBMod.invertShift)
     {
-        if (key == KeyCode.LeftShift && MBMod.invertShift)
-        {
-            __result = !__result;
-        }
+      __result = !__result;
     }
+  }
 }
