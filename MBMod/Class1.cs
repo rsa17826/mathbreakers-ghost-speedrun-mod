@@ -218,33 +218,8 @@ public class MBMod : BaseUnityPlugin
     }
     if (Input.GetKeyDown(KeyCode.F6))
     {
-      foreach (Renderer r in hidden)
+      foreach (Renderer r in FindObjectsOfType(typeof(Renderer)) as Renderer[])
         r.enabled = true;
-      hidden.Clear();
-
-      Renderer[] all = FindObjectsOfType(typeof(Renderer)) as Renderer[];
-
-      if (shaderIdx == -1)
-      {
-        var set = new HashSet<string>();
-        foreach (Renderer r in all)
-          set.Add(r.sharedMaterial.shader.name);
-        shaderNames = new string[set.Count];
-        set.CopyTo(shaderNames);
-      }
-
-      shaderIdx = (shaderIdx + 1) % shaderNames.Length;
-      string target = shaderNames[shaderIdx];
-
-      foreach (Renderer r in all)
-      {
-        if (r.sharedMaterial.shader.name == target)
-        {
-          r.enabled = false;
-          hidden.Add(r);
-        }
-      }
-      Log.LogInfo($"[Bisect] hiding {hidden.Count} renderers using '{target}'");
     }
     if (Input.GetKeyDown(KeyCode.F8))
     {
