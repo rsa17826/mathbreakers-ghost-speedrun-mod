@@ -93,6 +93,15 @@ public class MBMod : BaseUnityPlugin
     {
       CustomModel.Load("player.skin", "player.anim", "player.png");
     }
+    if (File.Exists("clone.skin") || File.Exists("clone.anim"))
+    {
+      // a separate ghost model needs all three files; a missing one throws with its name
+      CustomModel.LoadGhost("clone.skin", "clone.anim", "clone.png");
+    }
+    else if (File.Exists("clone.png"))
+    {
+      CustomModel.LoadGhostTexture("clone.png");
+    }
     SetupFileWatcher();
 
     Log.LogInfo("Mathbreakers Save Test loaded!");
@@ -355,16 +364,19 @@ public class MBMod : BaseUnityPlugin
       quad.renderer.material = mat;
     }
     GameObject player = GameObject.FindWithTag("Player");
-    var PlayerControllerObject = player.GetComponent<FPSWalkerEnhanced>();
-    if (CustomModel.enabled)
+    if (player)
     {
-      CustomModel.SpawnPlayer(player);
+      var PlayerControllerObject = player.GetComponent<FPSWalkerEnhanced>();
+      if (CustomModel.enabled)
+      {
+        CustomModel.SpawnPlayer(player);
+      }
+      // NOTE force player to spawn on ground so player can move instantly after level loads
+      PlayerControllerObject.moveDirection = new Vector3(0f, -80000f, 0f);
+      PlayerControllerObject.grounded = false;
+      if (showDeaths)
+        DeathMarkers.SpawnAll(level);
     }
-    // NOTE force player to spawn on ground so player can move instantly after level loads
-    PlayerControllerObject.moveDirection = new Vector3(0f, -80000f, 0f);
-    PlayerControllerObject.grounded = false;
-    if (showDeaths)
-      DeathMarkers.SpawnAll(level);
   }
 
   private void OnDestroy()

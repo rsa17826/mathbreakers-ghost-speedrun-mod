@@ -126,15 +126,15 @@ public class PlayerCoordsUI : MonoBehaviour
   // a visual marker.
   private GameObject CreateGhost(GameObject player)
   {
-    if (CustomModel.enabled)
+    if (CustomModel.GhostEnabled)
     {
       // Fresh copy of the custom model instead of a clone of the player, so it can run its own animations
       GameObject root = new GameObject("BestRunGhost");
       root.transform.position = player.transform.position;
       root.transform.rotation = player.transform.rotation;
       root.transform.localScale = player.transform.lossyScale;
-      ghostAnim = CustomModel.SpawnGhost(root.transform);
-      MakeTransparent(root, 0.35f);
+      ghostAnim = CustomModel.SpawnGhost(root.transform, player);
+      MakeTransparent(root, 0.55f);
       return root;
     }
 
@@ -167,7 +167,18 @@ public class PlayerCoordsUI : MonoBehaviour
       Destroy(listener);
     }
 
-    MakeTransparent(clone, 0.35f);
+    if (CustomModel.ghostTexture != null)
+    {
+      foreach (var renderer in clone.GetComponentsInChildren<Renderer>())
+      {
+        foreach (var mat in renderer.materials)
+        {
+          mat.mainTexture = CustomModel.ghostTexture;
+        }
+      }
+    }
+
+    MakeTransparent(clone, 0.55f);
     return clone;
   }
 

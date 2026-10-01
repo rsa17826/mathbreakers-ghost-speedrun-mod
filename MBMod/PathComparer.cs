@@ -365,7 +365,8 @@ public static class PathComparer
           if (!isLegacyV2 && reader.BaseStream.Position < reader.BaseStream.Length)
           {
             grounded = reader.ReadBoolean();
-            dying = reader.ReadBoolean();
+            dying = false;
+            // dying = reader.ReadBoolean();
           }
         }
 

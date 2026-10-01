@@ -7,9 +7,24 @@ using UnityEngine;
 // Loads the custom skinned model (player.skin, from export_model.py) and its animations
 // (player.anim, from export_anim.py), and spawns independent copies of it: the player and the ghost.
 // The model has its own skeleton; nothing from the game's original player rig is used.
+//
+// The ghost can use, in order of precedence:
+//   clone.skin + clone.anim + clone.png  -> its own separate model (all three are required together)
+//   clone.png                            -> the player's model (or the game's player mesh) with a different texture
+//   nothing                              -> the same model/texture as the player
 public static class CustomModel
 {
+  // The player uses the custom model
   public static bool enabled;
+
+  // Set when clone.png is loaded without a clone model
+  public static Texture2D ghostTexture;
+
+  // True when the ghost should be built from a custom model rather than cloning the game's player
+  public static bool GhostEnabled
+  {
+    get { return ghostModel != null || playerModel != null; }
+  }
 
   // Model height relative to the player's CharacterController height
   const float heightScale = 1.2f;
@@ -20,7 +35,7 @@ public static class CustomModel
   // Shifts the model in the player's local axes (x = right, y = up, z = forward). Negative y is down.
   static readonly Vector3 offset = new Vector3(0f, -0.0f, 5.5f);
 
-  // Every animation CustomPlayerAnim can pick must exist in player.anim
+  // Every animation CustomPlayerAnim can pick must exist in the .anim file
   static readonly string[] requiredClips = { "idle", "walk", "jump", "fly", "fall", "dying" };
   public static FPSWalkerEnhanced player;
   const string modelName = "CustomPlayerModel";
@@ -46,36 +61,64 @@ public static class CustomModel
     public float scale;
   }
 
-  // "model": the file is already in Unity axes (x=side, y=up, z=forward).
-  // "blender": raw Blender armature axes, converted on load.
-  static bool blenderSpace;
-  static string[] boneNames;
-  static int[] boneParent; // -1 = child of the model root
-  static Vector3[] bonePos; // rest positions in model space
-  static Mesh mesh;
-  static Texture2D tex;
-  static AnimationClip[] clips;
+  // Everything loaded from one .skin/.anim/.png set
+  class Model
+  {
+    // "model": the file is already in Unity axes (x=side, y=up, z=forward).
+    // "blender": raw Blender armature axes, converted on load.
+    public bool blenderSpace;
+    public string[] boneNames;
+    public int[] boneParent; // -1 = child of the model root
+    public Vector3[] bonePos; // rest positions in model space
+    public Mesh mesh;
+    public Texture2D tex;
+    public AnimationClip[] clips;
+  }
 
-  static bool havePlacement;
-  static Placement placement;
+  static Model playerModel;
+  static Model ghostModel; // null unless clone.skin/.anim/.png were loaded
 
   public static void Load(string skinPath, string animPath, string texPath)
   {
-    LoadSkin(skinPath);
+    playerModel = LoadModel(skinPath, animPath, texPath);
+    enabled = true;
+  }
+
+  // Separate model for the ghost. Needs all three files.
+  public static void LoadGhost(string skinPath, string animPath, string texPath)
+  {
+    ghostModel = LoadModel(skinPath, animPath, texPath);
+  }
+
+  // Only a different texture for the ghost
+  public static void LoadGhostTexture(string texPath)
+  {
+    ghostTexture = LoadTexture(texPath);
+  }
+
+  static Model LoadModel(string skinPath, string animPath, string texPath)
+  {
+    Model m = new Model();
+    LoadSkin(m, skinPath);
     List<AnimationClip> built = new List<AnimationClip>();
     foreach (ClipDef def in ParseAnimFile(animPath))
-      built.Add(BuildClip(animPath, def));
-    clips = built.ToArray();
+      built.Add(BuildClip(m, animPath, def));
+    m.clips = built.ToArray();
     foreach (string name in requiredClips)
     {
       if (!built.Exists(c => c.name == name))
         throw new Exception(animPath + " has no clip named '" + name + "'");
     }
+    m.tex = LoadTexture(texPath);
+    return m;
+  }
 
-    tex = new Texture2D(2, 2);
-    tex.hideFlags = HideFlags.HideAndDontSave;
-    tex.LoadImage(File.ReadAllBytes(texPath));
-    enabled = true;
+  static Texture2D LoadTexture(string path)
+  {
+    Texture2D t = new Texture2D(2, 2);
+    t.hideFlags = HideFlags.HideAndDontSave;
+    t.LoadImage(File.ReadAllBytes(path));
+    return t;
   }
 
   // ---------------------------------------------------------------- skin file
@@ -84,7 +127,7 @@ public static class CustomModel
   // bone<TAB><name><TAB><parent|-><TAB><x><TAB><y><TAB><z>     (tabs so names can contain spaces)
   // v <x> <y> <z> <nx> <ny> <nz> <u> <v> <bone0> <w0> <bone1> <w1> <bone2> <w2> <bone3> <w3>
   // t <a> <b> <c>
-  static void LoadSkin(string path)
+  static void LoadSkin(Model m, string path)
   {
     CultureInfo ci = CultureInfo.InvariantCulture;
     List<string> names = new List<string>();
@@ -111,7 +154,7 @@ public static class CustomModel
           if (p.Length != 2 || (p[1] != "model" && p[1] != "blender"))
             throw new Exception("expected 'space <model|blender>'");
           space = p[1];
-          blenderSpace = p[1] == "blender";
+          m.blenderSpace = p[1] == "blender";
         }
         else if (p[0] == "bone")
         {
@@ -120,14 +163,14 @@ public static class CustomModel
             throw new Exception("expected tab separated 'bone <name> <parent|-> <x> <y> <z>'");
           names.Add(t[1]);
           parentNames.Add(t[2]);
-          pos.Add(ToUnity(new Vector3(F(t[3], ci), F(t[4], ci), F(t[5], ci))));
+          pos.Add(ToUnity(m, new Vector3(F(t[3], ci), F(t[4], ci), F(t[5], ci))));
         }
         else if (p[0] == "v")
         {
           if (p.Length != 17)
             throw new Exception("expected 16 values after 'v'");
-          verts.Add(ToUnity(new Vector3(F(p[1], ci), F(p[2], ci), F(p[3], ci))));
-          normals.Add(ToUnity(new Vector3(F(p[4], ci), F(p[5], ci), F(p[6], ci))));
+          verts.Add(ToUnity(m, new Vector3(F(p[1], ci), F(p[2], ci), F(p[3], ci))));
+          normals.Add(ToUnity(m, new Vector3(F(p[4], ci), F(p[5], ci), F(p[6], ci))));
           uvs.Add(new Vector2(F(p[7], ci), F(p[8], ci)));
           BoneWeight w = new BoneWeight();
           w.boneIndex0 = int.Parse(p[9], ci);
@@ -165,18 +208,18 @@ public static class CustomModel
     if (space == null)
       throw new Exception(path + ": missing 'space' line");
 
-    boneNames = names.ToArray();
-    bonePos = pos.ToArray();
-    boneParent = new int[boneNames.Length];
-    for (int i = 0; i < boneNames.Length; i++)
+    m.boneNames = names.ToArray();
+    m.bonePos = pos.ToArray();
+    m.boneParent = new int[m.boneNames.Length];
+    for (int i = 0; i < m.boneNames.Length; i++)
     {
       if (parentNames[i] == "-")
       {
-        boneParent[i] = -1;
+        m.boneParent[i] = -1;
         continue;
       }
-      boneParent[i] = names.IndexOf(parentNames[i]);
-      if (boneParent[i] < 0)
+      m.boneParent[i] = names.IndexOf(parentNames[i]);
+      if (m.boneParent[i] < 0)
         throw new Exception(
           path + ": bone '" + names[i] + "' has unknown parent '" + parentNames[i] + "'"
         );
@@ -184,28 +227,28 @@ public static class CustomModel
     foreach (BoneWeight w in weights)
     {
       if (
-        w.boneIndex0 >= boneNames.Length
-        || w.boneIndex1 >= boneNames.Length
-        || w.boneIndex2 >= boneNames.Length
-        || w.boneIndex3 >= boneNames.Length
+        w.boneIndex0 >= m.boneNames.Length
+        || w.boneIndex1 >= m.boneNames.Length
+        || w.boneIndex2 >= m.boneNames.Length
+        || w.boneIndex3 >= m.boneNames.Length
       )
         throw new Exception(path + ": a vertex references a bone index past the last bone");
     }
 
     // Bones are translation-only at rest, so the bind pose is just the inverse translation
-    Matrix4x4[] bind = new Matrix4x4[boneNames.Length];
+    Matrix4x4[] bind = new Matrix4x4[m.boneNames.Length];
     for (int i = 0; i < bind.Length; i++)
-      bind[i] = Matrix4x4.TRS(-bonePos[i], Quaternion.identity, Vector3.one);
+      bind[i] = Matrix4x4.TRS(-m.bonePos[i], Quaternion.identity, Vector3.one);
 
-    mesh = new Mesh();
-    mesh.hideFlags = HideFlags.HideAndDontSave;
-    mesh.vertices = verts.ToArray();
-    mesh.normals = normals.ToArray();
-    mesh.uv = uvs.ToArray();
-    mesh.boneWeights = weights.ToArray();
-    mesh.bindposes = bind;
-    mesh.triangles = tris.ToArray();
-    mesh.RecalculateBounds();
+    m.mesh = new Mesh();
+    m.mesh.hideFlags = HideFlags.HideAndDontSave;
+    m.mesh.vertices = verts.ToArray();
+    m.mesh.normals = normals.ToArray();
+    m.mesh.uv = uvs.ToArray();
+    m.mesh.boneWeights = weights.ToArray();
+    m.mesh.bindposes = bind;
+    m.mesh.triangles = tris.ToArray();
+    m.mesh.RecalculateBounds();
   }
 
   static float F(string s, CultureInfo ci)
@@ -214,9 +257,9 @@ public static class CustomModel
   }
 
   // Blender armature axes (x right, y back, z up) -> Unity axes (x right, y up, z forward)
-  static Vector3 ToUnity(Vector3 v)
+  static Vector3 ToUnity(Model m, Vector3 v)
   {
-    return blenderSpace ? new Vector3(-v.x, v.z, -v.y) : v;
+    return m.blenderSpace ? new Vector3(-v.x, v.z, -v.y) : v;
   }
 
   // ---------------------------------------------------------------- animation file
@@ -280,7 +323,7 @@ public static class CustomModel
 
   // Bones rest with identity rotation, so each key is directly the bone's localRotation.
   // On Unity 5 or later, set clip.legacy = true here or the Animation component won't play it.
-  static AnimationClip BuildClip(string animPath, ClipDef def)
+  static AnimationClip BuildClip(Model m, string animPath, ClipDef def)
   {
     AnimationClip clip = new AnimationClip();
     clip.name = def.name;
@@ -288,7 +331,7 @@ public static class CustomModel
 
     foreach (KeyValuePair<string, List<Key>> kv in def.bones)
     {
-      int bone = Array.IndexOf(boneNames, kv.Key);
+      int bone = Array.IndexOf(m.boneNames, kv.Key);
       if (bone < 0)
         throw new Exception(
           animPath
@@ -315,7 +358,7 @@ public static class CustomModel
           * Quaternion.AngleAxis(k.pitch, Vector3.right)
           * Quaternion.AngleAxis(k.yaw, Vector3.up);
         // same mirroring as ToUnity, applied to a rotation
-        if (blenderSpace)
+        if (m.blenderSpace)
           q = new Quaternion(q.x, -q.z, q.y, q.w);
 
         // keep the quaternion in the same hemisphere as the previous key so it doesn't spin the long way
@@ -334,7 +377,7 @@ public static class CustomModel
           curve.SmoothTangents(i, 0f);
       }
 
-      string path = BonePath(bone);
+      string path = BonePath(m, bone);
       clip.SetCurve(path, typeof(Transform), "localRotation.x", c[0]);
       clip.SetCurve(path, typeof(Transform), "localRotation.y", c[1]);
       clip.SetCurve(path, typeof(Transform), "localRotation.z", c[2]);
@@ -344,15 +387,30 @@ public static class CustomModel
   }
 
   // Path of a bone relative to the model root
-  static string BonePath(int bone)
+  static string BonePath(Model m, int bone)
   {
-    string path = boneNames[bone];
-    for (int p = boneParent[bone]; p >= 0; p = boneParent[p])
-      path = boneNames[p] + "/" + path;
+    string path = m.boneNames[bone];
+    for (int p = m.boneParent[bone]; p >= 0; p = m.boneParent[p])
+      path = m.boneNames[p] + "/" + path;
     return path;
   }
 
   // ---------------------------------------------------------------- spawning
+
+  // Sizes and places a model to fit a CharacterController: its lowest point sits at the bottom of the capsule
+  static Placement Fit(Model m, CharacterController cc, Transform t)
+  {
+    Bounds capsule = cc.bounds;
+    Placement placement;
+    float worldScale = capsule.size.y * heightScale / m.mesh.bounds.size.y;
+    placement.scale = worldScale / t.lossyScale.y;
+    // model origin is between its feet: put its lowest point at the bottom of the capsule
+    Vector3 feet = t.InverseTransformPoint(
+      new Vector3(capsule.center.x, capsule.min.y, capsule.center.z)
+    );
+    placement.position = feet - new Vector3(0f, m.mesh.bounds.min.y, 0f) * placement.scale + offset;
+    return placement;
+  }
 
   // Builds the model on the player, sized and placed to fit its CharacterController, and hides the
   // game's original player mesh.
@@ -366,36 +424,31 @@ public static class CustomModel
       smr.enabled = false;
 
     CharacterController cc = player.GetComponent<CharacterController>();
-    Bounds capsule = cc.bounds;
-    float worldScale = capsule.size.y * heightScale / mesh.bounds.size.y;
-    Transform t = player.transform;
-    placement.scale = worldScale / t.lossyScale.y;
-    // model origin is between its feet: put its lowest point at the bottom of the capsule
-    Vector3 feet = t.InverseTransformPoint(
-      new Vector3(capsule.center.x, capsule.min.y, capsule.center.z)
-    );
-    placement.position = feet - new Vector3(0f, mesh.bounds.min.y, 0f) * placement.scale + offset;
-    havePlacement = true;
+    Placement placement = Fit(playerModel, cc, player.transform);
 
-    GameObject root = Build(t);
+    GameObject root = Build(playerModel, playerModel.tex, placement, player.transform);
     CustomPlayerAnim driver = root.AddComponent<CustomPlayerAnim>();
     driver.InitPlayer(root.GetComponent<Animation>(), cc);
     return driver;
   }
 
-  // Builds the model under ghostRoot (which should sit at the player's position/rotation/scale).
-  // SpawnPlayer must have run first so the ghost gets the same fit.
-  public static CustomPlayerAnim SpawnGhost(Transform ghostRoot)
+  // Builds the ghost's model under ghostRoot (which should sit at the player's position/rotation/scale),
+  // fitted to the player's capsule. Uses the clone model if one was loaded, otherwise the player's model,
+  // with the clone texture if one was loaded.
+  public static CustomPlayerAnim SpawnGhost(Transform ghostRoot, GameObject playerObject)
   {
-    if (!havePlacement)
-      throw new Exception("SpawnGhost called before SpawnPlayer");
-    GameObject root = Build(ghostRoot);
+    Model m = ghostModel != null ? ghostModel : playerModel;
+    Texture2D t = ghostTexture != null ? ghostTexture : m.tex;
+    CharacterController cc = playerObject.GetComponent<CharacterController>();
+    Placement placement = Fit(m, cc, playerObject.transform);
+
+    GameObject root = Build(m, t, placement, ghostRoot);
     CustomPlayerAnim driver = root.AddComponent<CustomPlayerAnim>();
     driver.InitGhost(root.GetComponent<Animation>());
     return driver;
   }
 
-  static GameObject Build(Transform parent)
+  static GameObject Build(Model m, Texture2D tex, Placement placement, Transform parent)
   {
     GameObject root = new GameObject(modelName);
     root.transform.parent = parent;
@@ -403,14 +456,14 @@ public static class CustomModel
     root.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
     root.transform.localScale = Vector3.one * placement.scale;
 
-    Transform[] bt = new Transform[boneNames.Length];
+    Transform[] bt = new Transform[m.boneNames.Length];
     for (int i = 0; i < bt.Length; i++)
-      bt[i] = new GameObject(boneNames[i]).transform;
+      bt[i] = new GameObject(m.boneNames[i]).transform;
     for (int i = 0; i < bt.Length; i++)
     {
-      int p = boneParent[i];
+      int p = m.boneParent[i];
       bt[i].parent = p < 0 ? root.transform : bt[p];
-      bt[i].localPosition = p < 0 ? bonePos[i] : bonePos[i] - bonePos[p];
+      bt[i].localPosition = p < 0 ? m.bonePos[i] : m.bonePos[i] - m.bonePos[p];
       bt[i].localRotation = Quaternion.identity;
       bt[i].localScale = Vector3.one;
     }
@@ -420,7 +473,7 @@ public static class CustomModel
     mat.color = Color.white;
 
     SkinnedMeshRenderer smr = root.AddComponent<SkinnedMeshRenderer>();
-    smr.sharedMesh = mesh;
+    smr.sharedMesh = m.mesh;
     smr.bones = bt;
     smr.quality = SkinQuality.Bone4;
     smr.updateWhenOffscreen = true;
@@ -428,7 +481,7 @@ public static class CustomModel
 
     Animation anim = root.AddComponent<Animation>();
     anim.cullingType = AnimationCullingType.AlwaysAnimate;
-    foreach (AnimationClip clip in clips)
+    foreach (AnimationClip clip in m.clips)
       anim.AddClip(clip, clip.name);
     return root;
   }
@@ -450,7 +503,7 @@ public class CustomPlayerAnim : MonoBehaviour
   const float jumpVel = 1f; // upward speed above this counts as jumping
   const float fallVel = -10f; // downward speed below this counts as falling
   const float walkCyclesPerUnit = 0.07f; // walk clip cycles per unit of distance traveled
-  const float fadeTime = 0.1f; // crossfade between animations
+  const float fadeTime = .3f; // crossfade between animations
 
   // Driving mode for Replay/Ghost
   public bool isReplayGhost = false;
