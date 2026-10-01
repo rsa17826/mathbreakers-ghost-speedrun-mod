@@ -527,7 +527,8 @@ public class CustomPlayerAnim : MonoBehaviour
       case PlayerState.Fall:
         return "fall";
       case PlayerState.Idle:
-        return "idle";
+      case PlayerState.Walk:
+        return "dying";
     }
     throw new Exception("unhandled player state " + playerState);
   }
