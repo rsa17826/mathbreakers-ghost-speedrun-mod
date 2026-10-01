@@ -53,10 +53,21 @@ public class PlayerCoordsUI : MonoBehaviour
     Vector3 vel = Vector3.zero;
 
     // Retrieve velocity from CharacterController, Rigidbody, or positional delta
+    GameObject player = playerTransform.gameObject;
+    FPSWalkerEnhanced walker = player.GetComponent<FPSWalkerEnhanced>();
     CharacterController controller = playerTransform.GetComponent<CharacterController>();
-    vel = controller.velocity;
+    if (controller != null)
+    {
+      vel = controller.velocity;
+    }
 
-    PathComparer.Tick(playerTransform.position, playerTransform.rotation, vel);
+    PathComparer.Tick(
+      playerTransform.position,
+      playerTransform.rotation,
+      vel,
+      walker.grounded,
+      walker.dying
+    );
     UpdateGhost();
   }
 
@@ -69,11 +80,13 @@ public class PlayerCoordsUI : MonoBehaviour
     {
       ghost = CreateGhost(playerTransform.gameObject);
     }
+
     if (!PathComparer.IsRunning)
     {
       if (ghostAnim != null)
       {
         ghostAnim.currentGhostVelocity = Vector3.zero;
+        ghostAnim.isGrounded = true;
       }
       return;
     }
@@ -83,13 +96,25 @@ public class PlayerCoordsUI : MonoBehaviour
       Vector3 pos;
       Quaternion rot;
       Vector3 vel;
-      if (PathComparer.TryGetBestTransform(PathComparer.ElapsedTime, out pos, out rot, out vel))
+      bool grounded;
+      bool dying;
+      if (
+        PathComparer.TryGetBestTransform(
+          PathComparer.ElapsedTime,
+          out pos,
+          out rot,
+          out vel,
+          out grounded,
+          out dying
+        )
+      )
       {
         ghost.transform.position = pos;
         ghost.transform.rotation = rot;
         if (ghostAnim != null)
         {
           ghostAnim.currentGhostVelocity = vel;
+          ghostAnim.isGrounded = grounded;
         }
       }
     }
@@ -175,9 +200,6 @@ public class PlayerCoordsUI : MonoBehaviour
       }
       else if (PathComparer.IsRunning)
       {
-        // Log.LogInfo(
-        //   "[PathComparer] no player detected, stopping run on level " + Application.loadedLevel
-        // );
         PathComparer.EndRun(false);
       }
     }

@@ -455,6 +455,8 @@ public class CustomPlayerAnim : MonoBehaviour
   // Driving mode for Replay/Ghost
   public bool isReplayGhost = false;
   public Vector3 currentGhostVelocity;
+  public bool isGrounded = true; // Added grounded state for ghost / driver
+  public bool isDying = false; // Added grounded state for ghost / driver
 
   Animation anim;
   CharacterController controller; // null for the ghost
@@ -485,16 +487,20 @@ public class CustomPlayerAnim : MonoBehaviour
   }
 
   // lastAnimation is the clip picked on the previous frame (null on the first frame)
-  static string ChooseAnimation(PlayerState playerState, string lastAnimation, Animation anim)
+  static string ChooseAnimation(
+    PlayerState playerState,
+    string lastAnimation,
+    Animation anim,
+    bool grounded,
+    bool dying
+  )
   {
-    if (CustomModel.player.dying)
+    if (dying)
     {
       return "dying";
     }
-    // if (CustomModel.player.falling){
-    //   return "falling";
-    // }
-    if (CustomModel.player.grounded)
+
+    if (grounded)
     {
       if (playerState == PlayerState.Walk)
       {
@@ -520,6 +526,8 @@ public class CustomPlayerAnim : MonoBehaviour
         }
       case PlayerState.Fall:
         return "fall";
+      case PlayerState.Idle:
+        return "idle";
     }
     throw new Exception("unhandled player state " + playerState);
   }
@@ -531,17 +539,19 @@ public class CustomPlayerAnim : MonoBehaviour
       return;
 
     Vector3 vel = isReplayGhost ? currentGhostVelocity : controller.velocity;
+    bool grounded = isReplayGhost ? isGrounded : (controller != null && controller.isGrounded);
+    bool dying = isReplayGhost ? isDying : (CustomModel.player != null && CustomModel.player.dying);
+
     float hSpeed = new Vector3(vel.x, 0f, vel.z).magnitude;
     vy = Mathf.Lerp(vy, vel.y, 1f - Mathf.Exp(-10f * dt));
 
-    string next = ChooseAnimation(GetState(hSpeed, vy), lastAnimation, anim);
+    string next = ChooseAnimation(GetState(hSpeed, vy), lastAnimation, anim, grounded, dying);
     if (next != lastAnimation)
     {
       anim.CrossFade(next, fadeTime);
       lastAnimation = next;
     }
 
-    // walk clip is one stride cycle: play it faster the faster we move
     if (lastAnimation == "walk")
       anim["walk"].speed = hSpeed * walkCyclesPerUnit * anim["walk"].length;
   }

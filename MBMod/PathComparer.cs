@@ -23,6 +23,8 @@ public static class PathComparer
     public Vector3 Position;
     public Quaternion Rotation;
     public Vector3 Velocity;
+    public bool Grounded;
+    public bool Dying;
   }
 
   private static readonly List<PathSample> currentRun = new List<PathSample>();
@@ -68,12 +70,16 @@ public static class PathComparer
     float elapsed,
     out Vector3 position,
     out Quaternion rotation,
-    out Vector3 velocity
+    out Vector3 velocity,
+    out bool grounded,
+    out bool dying
   )
   {
     position = Vector3.zero;
     rotation = Quaternion.identity;
     velocity = Vector3.zero;
+    grounded = true;
+    dying = false;
 
     if (bestRun == null || bestRun.Count == 0)
       return false;
@@ -83,6 +89,8 @@ public static class PathComparer
       position = bestRun[0].Position;
       rotation = bestRun[0].Rotation;
       velocity = bestRun[0].Velocity;
+      grounded = bestRun[0].Grounded;
+      dying = bestRun[0].Dying;
       return true;
     }
 
@@ -92,6 +100,8 @@ public static class PathComparer
       position = last.Position;
       rotation = last.Rotation;
       velocity = last.Velocity;
+      grounded = last.Grounded;
+      dying = last.Dying;
       return true;
     }
 
@@ -107,6 +117,9 @@ public static class PathComparer
         position = Vector3.Lerp(prev.Position, next.Position, t);
         rotation = Quaternion.Slerp(prev.Rotation, next.Rotation, t);
         velocity = Vector3.Lerp(prev.Velocity, next.Velocity, t);
+        // For boolean flags like grounded, use thresholding based on nearest or step point
+        grounded = t < 0.5f ? prev.Grounded : next.Grounded;
+        dying = t < 0.5f ? prev.Dying : next.Dying;
         return true;
       }
     }
@@ -114,7 +127,29 @@ public static class PathComparer
     position = last.Position;
     rotation = last.Rotation;
     velocity = last.Velocity;
+    grounded = last.Grounded;
+    dying = last.Dying;
     return true;
+  }
+
+  // Keep existing overload for backward compatibility if needed:
+  public static bool TryGetBestTransform(
+    float elapsed,
+    out Vector3 position,
+    out Quaternion rotation,
+    out Vector3 velocity
+  )
+  {
+    bool dummyGrounded;
+    bool dummyDying;
+    return TryGetBestTransform(
+      elapsed,
+      out position,
+      out rotation,
+      out velocity,
+      out dummyGrounded,
+      out dummyDying
+    );
   }
 
   public static bool TryGetBestPosition(float elapsed, out Vector3 position)
@@ -147,14 +182,27 @@ public static class PathComparer
     );
   }
 
-  public static void Tick(Vector3 position, Quaternion rotation, Vector3 velocity)
+  public static void Tick(
+    Vector3 position,
+    Quaternion rotation,
+    Vector3 velocity,
+    bool grounded,
+    bool dying
+  )
   {
     if (!IsRunning)
       return;
-    Sample(Time.time - runStartTime, position, rotation, velocity);
+    Sample(Time.time - runStartTime, position, rotation, velocity, grounded, dying);
   }
 
-  public static void Sample(float elapsed, Vector3 position, Quaternion rotation, Vector3 velocity)
+  public static void Sample(
+    float elapsed,
+    Vector3 position,
+    Quaternion rotation,
+    Vector3 velocity,
+    bool grounded,
+    bool dying
+  )
   {
     if (currentLevel < 0)
       return;
@@ -168,6 +216,7 @@ public static class PathComparer
           Position = position,
           Rotation = rotation,
           Velocity = velocity,
+          Grounded = grounded,
         }
       );
       lastRecordTime = elapsed;
@@ -266,6 +315,7 @@ public static class PathComparer
         writer.Write(sample.Velocity.x);
         writer.Write(sample.Velocity.y);
         writer.Write(sample.Velocity.z);
+        writer.Write(sample.Grounded); // Write bool
       }
     }
   }
@@ -280,8 +330,12 @@ public static class PathComparer
     {
       int count = reader.ReadInt32();
       var result = new List<PathSample>(count);
-      long expectedBytesLegacy = 4 + (long)count * 16;
-      bool isLegacy = reader.BaseStream.Length == expectedBytesLegacy;
+      long fileLength = reader.BaseStream.Length;
+
+      long expectedBytesLegacyV1 = 4 + (long)count * 16; // Pos only
+      long expectedBytesLegacyV2 = 4 + (long)count * 44; // Pos + Rot + Vel (11 floats * 4)
+      bool isLegacyV1 = fileLength == expectedBytesLegacyV1;
+      bool isLegacyV2 = fileLength == expectedBytesLegacyV2;
 
       for (int i = 0; i < count; i++)
       {
@@ -292,8 +346,10 @@ public static class PathComparer
 
         Quaternion rot = Quaternion.identity;
         Vector3 vel = Vector3.zero;
+        bool grounded = true;
+        bool dying = false;
 
-        if (!isLegacy)
+        if (!isLegacyV1)
         {
           float rx = reader.ReadSingle();
           float ry = reader.ReadSingle();
@@ -305,6 +361,12 @@ public static class PathComparer
           float vy = reader.ReadSingle();
           float vz = reader.ReadSingle();
           vel = new Vector3(vx, vy, vz);
+
+          if (!isLegacyV2 && reader.BaseStream.Position < reader.BaseStream.Length)
+          {
+            grounded = reader.ReadBoolean();
+            dying = reader.ReadBoolean();
+          }
         }
 
         result.Add(
@@ -314,12 +376,14 @@ public static class PathComparer
             Position = new Vector3(x, y, z),
             Rotation = rot,
             Velocity = vel,
+            Grounded = grounded,
+            Dying = dying,
           }
         );
       }
 
       // Infer velocity if missing on older files
-      if (isLegacy && result.Count > 1)
+      if (isLegacyV1 && result.Count > 1)
       {
         for (int i = 0; i < result.Count; i++)
         {
