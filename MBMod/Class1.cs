@@ -354,10 +354,15 @@ public class MBMod : BaseUnityPlugin
       mat.renderQueue = 1000;
       quad.renderer.material = mat;
     }
+    GameObject player = GameObject.FindWithTag("Player");
+    var PlayerControllerObject = player.GetComponent<FPSWalkerEnhanced>();
     if (CustomModel.enabled)
     {
-      CustomModel.SpawnPlayer(GameObject.FindWithTag("Player"));
+      CustomModel.SpawnPlayer(player);
     }
+    // NOTE force player to spawn on ground so player can move instantly after level loads
+    PlayerControllerObject.moveDirection = new Vector3(0f, -80000f, 0f);
+    PlayerControllerObject.grounded = false;
     if (showDeaths)
       DeathMarkers.SpawnAll(level);
   }

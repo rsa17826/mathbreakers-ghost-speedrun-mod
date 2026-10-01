@@ -17,6 +17,6 @@
     "**/bin": true,
     "**/obj": true,
     "**/*.dll": true,
-    // "**/*.obj": true
+    "**/*.obj": true
   }
 }
