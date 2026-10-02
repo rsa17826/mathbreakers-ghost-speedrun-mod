@@ -44,7 +44,7 @@ public class PlayerCoordsUI : MonoBehaviour
     _bgTexture.Apply();
   }
 
-  private void Update()
+  private void FixedUpdate()
   {
     if (playerTransform == null)
       return;
