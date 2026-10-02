@@ -34,10 +34,6 @@ public static class PathComparer
   private static float lastRecordTime;
   private static float runStartTime;
 
-  // Recording every frame (rather than throttling) matters here: the ghost
-  // linearly interpolates between consecutive samples, and a coarse interval
-  // visibly cuts corners through non-linear motion like jump arcs. File size
-  // stays trivial (a few hundred KB even for a multi-minute run) at 60fps.
   private const float RecordInterval = 0f;
   private const int BackwardSearchWindow = 120; // samples to look behind the last match (~2s at 60fps)
   private const int ForwardSearchWindow = 1200; // samples to look ahead of the last match (~20s at 60fps)
@@ -117,7 +113,6 @@ public static class PathComparer
         position = Vector3.Lerp(prev.Position, next.Position, t);
         rotation = Quaternion.Slerp(prev.Rotation, next.Rotation, t);
         velocity = Vector3.Lerp(prev.Velocity, next.Velocity, t);
-        // For boolean flags like grounded, use thresholding based on nearest or step point
         grounded = t < 0.5f ? prev.Grounded : next.Grounded;
         dying = t < 0.5f ? prev.Dying : next.Dying;
         return true;
@@ -132,7 +127,6 @@ public static class PathComparer
     return true;
   }
 
-  // Keep existing overload for backward compatibility if needed:
   public static bool TryGetBestTransform(
     float elapsed,
     out Vector3 position,
@@ -161,7 +155,6 @@ public static class PathComparer
 
   private static string PathFileFor(int level)
   {
-    // return Path.Combine(Application.persistentDataPath, "bestpath_level" + level + ".dat");
     return "bestpath_level" + level + ".dat";
   }
 
@@ -217,6 +210,7 @@ public static class PathComparer
           Rotation = rotation,
           Velocity = velocity,
           Grounded = grounded,
+          Dying = dying,
         }
       );
       lastRecordTime = elapsed;
@@ -315,7 +309,8 @@ public static class PathComparer
         writer.Write(sample.Velocity.x);
         writer.Write(sample.Velocity.y);
         writer.Write(sample.Velocity.z);
-        writer.Write(sample.Grounded); // Write bool
+        writer.Write(sample.Grounded);
+        writer.Write(sample.Dying);
       }
     }
   }
@@ -326,16 +321,25 @@ public static class PathComparer
     if (!File.Exists(path))
       return null;
 
+    var result = new List<PathSample>();
+    bool needsUpgrade = false;
+
     using (var reader = new BinaryReader(File.OpenRead(path)))
     {
       int count = reader.ReadInt32();
-      var result = new List<PathSample>(count);
+      result.Capacity = count;
       long fileLength = reader.BaseStream.Length;
 
-      long expectedBytesLegacyV1 = 4 + (long)count * 16; // Pos only
-      long expectedBytesLegacyV2 = 4 + (long)count * 44; // Pos + Rot + Vel (11 floats * 4)
+      long expectedBytesLegacyV1 = 4 + (long)count * 16; // Time + Pos (4 floats * 4)
+      long expectedBytesLegacyV2 = 4 + (long)count * 44; // Time + Pos + Rot + Vel (11 floats * 4)
+
       bool isLegacyV1 = fileLength == expectedBytesLegacyV1;
       bool isLegacyV2 = fileLength == expectedBytesLegacyV2;
+
+      if (isLegacyV1 || isLegacyV2)
+      {
+        needsUpgrade = true;
+      }
 
       for (int i = 0; i < count; i++)
       {
@@ -365,8 +369,14 @@ public static class PathComparer
           if (!isLegacyV2 && reader.BaseStream.Position < reader.BaseStream.Length)
           {
             grounded = reader.ReadBoolean();
-            dying = false;
-            // dying = reader.ReadBoolean();
+            if (reader.BaseStream.Position < reader.BaseStream.Length)
+            {
+              dying = reader.ReadBoolean();
+            }
+            else
+            {
+              needsUpgrade = true; // Missing 'dying' flag
+            }
           }
         }
 
@@ -383,27 +393,75 @@ public static class PathComparer
         );
       }
 
-      // Infer velocity if missing on older files
-      if (isLegacyV1 && result.Count > 1)
+      // Infer missing values for older file versions
+      if (isLegacyV1 || isLegacyV2 || needsUpgrade)
       {
+        Quaternion lastValidRotation = Quaternion.identity;
+
         for (int i = 0; i < result.Count; i++)
         {
-          Vector3 velocityCalculated = Vector3.zero;
-          if (i > 0)
+          var s = result[i];
+
+          // Calculate inferred Velocity if missing
+          if (isLegacyV1)
           {
-            float dt = result[i].Time - result[i - 1].Time;
-            if (dt > 0.0001f)
+            Vector3 vel = Vector3.zero;
+            if (i > 0)
             {
-              velocityCalculated = (result[i].Position - result[i - 1].Position) / dt;
+              float dt = s.Time - result[i - 1].Time;
+              if (dt > 0.0001f)
+              {
+                vel = (s.Position - result[i - 1].Position) / dt;
+              }
+            }
+            s.Velocity = vel;
+          }
+
+          // Calculate inferred Facing Direction/Rotation if missing
+          if (isLegacyV1)
+          {
+            Vector3 moveDirection = Vector3.zero;
+            if (i < result.Count - 1)
+            {
+              moveDirection = result[i + 1].Position - s.Position;
+            }
+            else if (i > 0)
+            {
+              moveDirection = s.Position - result[i - 1].Position;
+            }
+
+            if (moveDirection.sqrMagnitude > 0.0001f)
+            {
+              s.Rotation = Quaternion.LookRotation(moveDirection.normalized);
+              lastValidRotation = s.Rotation;
+            }
+            else
+            {
+              s.Rotation = lastValidRotation;
             }
           }
-          var s = result[i];
-          s.Velocity = velocityCalculated;
+
           result[i] = s;
         }
       }
-
-      return result;
     }
+
+    // Overwrite old file with the upgraded latest format on disk
+    if (needsUpgrade && result.Count > 0)
+    {
+      try
+      {
+        SavePath(level, result);
+        MBMod.Log.LogInfo(
+          "[PathComparer] Upgraded legacy file path for level " + level + " to latest format."
+        );
+      }
+      catch (Exception ex)
+      {
+        MBMod.Log.LogWarning("[PathComparer] Failed to save upgraded path file: " + ex.Message);
+      }
+    }
+
+    return result;
   }
 }

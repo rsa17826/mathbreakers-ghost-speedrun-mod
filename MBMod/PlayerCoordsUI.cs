@@ -115,6 +115,7 @@ public class PlayerCoordsUI : MonoBehaviour
         {
           ghostAnim.currentGhostVelocity = vel;
           ghostAnim.isGrounded = grounded;
+          ghostAnim.isDying = dying;
         }
       }
     }
@@ -134,7 +135,7 @@ public class PlayerCoordsUI : MonoBehaviour
       root.transform.rotation = player.transform.rotation;
       root.transform.localScale = player.transform.lossyScale;
       ghostAnim = CustomModel.SpawnGhost(root.transform, player);
-      MakeTransparent(root, 0.55f);
+      MakeTransparent(root, 1f);
       return root;
     }
 

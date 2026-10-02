@@ -5,15 +5,10 @@
 @untilfail
 @endregex
 
-! @file \.anim$
-! @regex clip WalkBack_Right[\s\S]*?\n\n
-! @replace
-! @endregex
-! ! @js
-
-! ! var start = text.indexOf("clip "+"Dodge_")
-! ! if (!start)return []
-! ! var end = text.substr(start).indexOf("\n\n")
-! ! if (!end)return []
-! ! return [{start,end,text:''}]
-! ! @endjs
+@js
+var start = text.indexOf("clip Dodge_")
+if (start === -1) return []
+var end = text.indexOf("\n\n", start)
+if (end === -1) return []
+  return [{ start, end: end + 2, text: "" }]
+@endjs
