@@ -135,7 +135,7 @@ public class PlayerCoordsUI : MonoBehaviour
       root.transform.rotation = player.transform.rotation;
       root.transform.localScale = player.transform.lossyScale;
       ghostAnim = CustomModel.SpawnGhost(root.transform, player);
-      MakeTransparent(root, 1f);
+      MakeTransparent(root, MBMod.ghostTrans);
       return root;
     }
 
@@ -179,12 +179,15 @@ public class PlayerCoordsUI : MonoBehaviour
       }
     }
 
-    MakeTransparent(clone, 0.55f);
+    MakeTransparent(clone, MBMod.ghostTrans);
     return clone;
   }
 
+  // NOTE this breaks any layering
   private static void MakeTransparent(GameObject go, float alpha)
   {
+    if (alpha >= 1)
+      return;
     var transparentShader = Shader.Find("Transparent/Diffuse");
     foreach (var renderer in go.GetComponentsInChildren<Renderer>())
     {

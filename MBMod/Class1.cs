@@ -16,6 +16,7 @@ public class MBMod : BaseUnityPlugin
   public static readonly HashSet<int> UnlockedLevels = new HashSet<int>();
   public static HashSet<string> unlockedWeapons = new HashSet<string>();
   public static float maxBad = 0f;
+  public static float ghostTrans = .35f;
   public static bool showDeaths = false;
   public static bool invertShift = false;
 
@@ -70,6 +71,26 @@ public class MBMod : BaseUnityPlugin
       catch (Exception ex)
       {
         Log.LogError($"Error reading maxBadTime file: {ex.Message}");
+      }
+    }
+    if (File.Exists("ghostTrans"))
+    {
+      try
+      {
+        string fileContent = File.ReadAllText("ghostTrans").Trim();
+        if (float.TryParse(fileContent, out float parsedValue))
+        {
+          ghostTrans = parsedValue;
+          Log.LogInfo($"Loaded ghostTrans value: {ghostTrans}");
+        }
+        else
+        {
+          Log.LogWarning($"Failed to parse float from file: {fileContent}");
+        }
+      }
+      catch (Exception ex)
+      {
+        Log.LogError($"Error reading ghostTrans file: {ex.Message}");
       }
     }
     if (File.Exists("background.png"))
