@@ -53,9 +53,7 @@ from mathutils import Matrix
 # CONFIGURATION
 # ============================================================
 
-OUT_DIR = os.path.dirname(
-    os.path.abspath(__file__)
-)
+OUT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 SKIN_OUT = os.path.join(OUT_DIR, "player.skin")
@@ -313,36 +311,49 @@ if atlas is None:
 
 
 # ============================================================
-# PREPARE MATERIAL IMAGE NODES
+# PREPARE MATERIAL IMAGE NODES + ALBEDO->EMISSION REWIRE
 # ============================================================
 
-# Baking writes into the image associated with the ACTIVE
-# Image Texture node.
-#
-# Every material used by the source meshes gets an image
-# texture node pointing at the same atlas.
-#
-# The node is NOT made the material's visible color input.
-# It is only the baking target.
+# Baking DIFFUSE ignores base color on metallic surfaces and on
+# alpha-blended parts. Instead, route Base Color into an Emission
+# shader and bake EMIT, which captures the albedo exactly.
 
-bake_nodes = []
+rewired = [] # (material tree, output node, original surface source socket)
 
 for obj in duplicates:
   for slot in obj.material_slots:
     mat = slot.material
 
-    if mat is None:
-      continue
-
     mat.use_nodes = True
 
-    nodes = mat.node_tree.nodes
+    tree = mat.node_tree
+    nodes = tree.nodes
 
-    # Remove an old temporary node.
-    old = nodes.get("__PLAYER_BAKE_TARGET__")
+    if nodes.get("__PLAYER_BAKE_TARGET__"):
+      continue # material already prepared (shared between meshes)
 
-    if old:
-      nodes.remove(old)
+    out = next(n for n in nodes if n.type == "OUTPUT_MATERIAL" and n.is_active_output)
+    surface_link = out.inputs["Surface"].links[0]
+    principled = surface_link.from_node
+
+    if principled.type != "BSDF_PRINCIPLED":
+      raise Exception("material %s: surface is %s, expected Principled BSDF" % (mat.name, principled.type))
+
+    base_input = principled.inputs["Base Color"]
+
+    emit = nodes.new("ShaderNodeEmission")
+    emit.name = "__PLAYER_BAKE_EMIT__"
+    emit.inputs["Strength"].default_value = 1.0
+
+    if base_input.links:
+      tree.links.new(base_input.links[0].from_socket, emit.inputs["Color"])
+    else:
+      emit.inputs["Color"].default_value = base_input.default_value
+
+    original_source = surface_link.from_socket
+    tree.links.new(emit.outputs["Emission"], out.inputs["Surface"])
+
+    rewired.append((tree, out, original_source))
 
     node = nodes.new("ShaderNodeTexImage")
 
@@ -351,15 +362,11 @@ for obj in duplicates:
 
     node.image = atlas
 
-    # IMPORTANT:
-    # Selecting this node tells Blender where to bake.
     for n in nodes:
       n.select = False
 
     node.select = True
     nodes.active = node
-
-    bake_nodes.append(node)
 
 
 # ============================================================
@@ -402,13 +409,9 @@ bpy.context.view_layer.objects.active = duplicates[0]
 
 print("Baking albedo...")
 
-try:
-  bpy.ops.object.bake(type="DIFFUSE", pass_filter={"COLOR"}, use_clear=True, margin=BAKE_MARGIN_PIXELS, target="IMAGE_TEXTURES", uv_layer=ATLAS_UV_NAME)
+scene.cycles.samples = 1
 
-except TypeError:
-  # Some Blender releases don't accept uv_layer.
-  bpy.ops.object.bake(type="DIFFUSE", pass_filter={"COLOR"}, use_clear=True, margin=BAKE_MARGIN_PIXELS, target="IMAGE_TEXTURES")
-
+bpy.ops.object.bake(type="EMIT", use_clear=True, margin=BAKE_MARGIN_PIXELS, target="IMAGE_TEXTURES", uv_layer=ATLAS_UV_NAME)
 
 # ============================================================
 # SAVE PLAYER.PNG
@@ -431,21 +434,10 @@ print("Wrote player.png (%dx%d)" % (atlas.size[0], atlas.size[1]))
 # REMOVE BAKE NODES
 # ============================================================
 
-for obj in duplicates:
-  for slot in obj.material_slots:
-    mat = slot.material
-
-    if mat is None:
-      continue
-
-    nodes = mat.node_tree.nodes
-
-    node = nodes.get("__PLAYER_BAKE_TARGET__")
-
-    if node:
-      nodes.remove(node)
-
-
+for tree, out, original_source in rewired:
+  tree.nodes.remove(tree.nodes["__PLAYER_BAKE_EMIT__"])
+  tree.nodes.remove(tree.nodes["__PLAYER_BAKE_TARGET__"])
+  tree.links.new(original_source, out.inputs["Surface"])
 
 # ============================================================
 # BUILD EXPORT DATA
