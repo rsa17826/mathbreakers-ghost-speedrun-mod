@@ -309,7 +309,10 @@ else:
 if atlas is None:
   atlas = bpy.data.images.new(name="PLAYER_ALBEDO_ATLAS", width=ATLAS_SIZE, height=ATLAS_SIZE, alpha=True)
 
+atlas.alpha_mode = "STRAIGHT"
 
+alpha_atlas = bpy.data.images.new(name="PLAYER_ALPHA_ATLAS", width=ATLAS_SIZE, height=ATLAS_SIZE, alpha=False)
+alpha_atlas.colorspace_settings.name = "Non-Color"
 # ============================================================
 # PREPARE MATERIAL IMAGE NODES + ALBEDO->EMISSION REWIRE
 # ============================================================
@@ -353,9 +356,21 @@ for obj in duplicates:
     original_source = surface_link.from_socket
     tree.links.new(emit.outputs["Emission"], out.inputs["Surface"])
 
-    rewired.append((tree, out, original_source))
+    alpha_input = principled.inputs["Alpha"]
 
     node = nodes.new("ShaderNodeTexImage")
+
+    rewired.append(
+      {
+        "tree": tree,
+        "out": out,
+        "original_source": original_source,
+        "emit": emit,
+        "alpha_source": alpha_input.links[0].from_socket if alpha_input.links else None,
+        "alpha_default": alpha_input.default_value,
+        "target": node,
+      }
+    )
 
     node.name = "__PLAYER_BAKE_TARGET__"
     node.label = "__PLAYER_BAKE_TARGET__"
@@ -412,7 +427,36 @@ print("Baking albedo...")
 scene.cycles.samples = 1
 
 bpy.ops.object.bake(type="EMIT", use_clear=True, margin=BAKE_MARGIN_PIXELS, target="IMAGE_TEXTURES", uv_layer=ATLAS_UV_NAME)
+print("Baking alpha...")
 
+for r in rewired:
+  emit = r["emit"]
+
+  if r["alpha_source"]:
+    r["tree"].links.new(r["alpha_source"], emit.inputs["Color"])
+  else:
+    for link in list(emit.inputs["Color"].links):
+      r["tree"].links.remove(link)
+
+    a = r["alpha_default"]
+    emit.inputs["Color"].default_value = (a, a, a, 1.0)
+
+  r["target"].image = alpha_atlas
+
+bpy.ops.object.bake(type="EMIT", use_clear=True, margin=BAKE_MARGIN_PIXELS, target="IMAGE_TEXTURES", uv_layer=ATLAS_UV_NAME)
+
+import numpy as np
+
+count = ATLAS_SIZE * ATLAS_SIZE * 4
+
+color_px = np.empty(count, dtype=np.float32)
+atlas.pixels.foreach_get(color_px)
+
+alpha_px = np.empty(count, dtype=np.float32)
+alpha_atlas.pixels.foreach_get(alpha_px)
+
+color_px[3::4] = alpha_px[0::4]
+atlas.pixels.foreach_set(color_px)
 # ============================================================
 # SAVE PLAYER.PNG
 # ============================================================
@@ -434,10 +478,10 @@ print("Wrote player.png (%dx%d)" % (atlas.size[0], atlas.size[1]))
 # REMOVE BAKE NODES
 # ============================================================
 
-for tree, out, original_source in rewired:
-  tree.nodes.remove(tree.nodes["__PLAYER_BAKE_EMIT__"])
-  tree.nodes.remove(tree.nodes["__PLAYER_BAKE_TARGET__"])
-  tree.links.new(original_source, out.inputs["Surface"])
+for r in rewired:
+  r["tree"].nodes.remove(r["emit"])
+  r["tree"].nodes.remove(r["target"])
+  r["tree"].links.new(r["original_source"], r["out"].inputs["Surface"])
 
 # ============================================================
 # BUILD EXPORT DATA

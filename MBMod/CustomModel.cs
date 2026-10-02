@@ -73,6 +73,12 @@ public static class CustomModel
     public Mesh mesh;
     public Texture2D tex;
     public AnimationClip[] clips;
+    public Vector3[] verts;
+    public Vector3[] normals;
+    public Vector2[] uvs;
+    public BoneWeight[] weights;
+    public int[] tris;
+    public Matrix4x4[] bind;
   }
 
   static Model playerModel;
@@ -110,6 +116,7 @@ public static class CustomModel
         throw new Exception(animPath + " has no clip named '" + name + "'");
     }
     m.tex = LoadTexture(texPath);
+    BuildMesh(m);
     return m;
   }
 
@@ -119,6 +126,71 @@ public static class CustomModel
     t.hideFlags = HideFlags.HideAndDontSave;
     t.LoadImage(File.ReadAllBytes(path));
     return t;
+  }
+
+  // Submesh 0: opaque. Submesh 1: any triangle touching translucent texels, double sided.
+  static void BuildMesh(Model m)
+  {
+    List<int> opaque = new List<int>();
+    List<int> blended = new List<int>();
+    for (int i = 0; i < m.tris.Length; i += 3)
+    {
+      int a = m.tris[i],
+        b = m.tris[i + 1],
+        c = m.tris[i + 2];
+      Vector2 centroid = (m.uvs[a] + m.uvs[b] + m.uvs[c]) / 3f;
+      bool translucent =
+        m.tex.GetPixelBilinear(centroid.x, centroid.y).a < 0.99f
+        || m.tex.GetPixelBilinear(m.uvs[a].x, m.uvs[a].y).a < 0.99f
+        || m.tex.GetPixelBilinear(m.uvs[b].x, m.uvs[b].y).a < 0.99f
+        || m.tex.GetPixelBilinear(m.uvs[c].x, m.uvs[c].y).a < 0.99f;
+      List<int> target = translucent ? blended : opaque;
+      target.Add(a);
+      target.Add(b);
+      target.Add(c);
+    }
+
+    List<Vector3> verts = new List<Vector3>(m.verts);
+    List<Vector3> normals = new List<Vector3>(m.normals);
+    List<Vector2> uvs = new List<Vector2>(m.uvs);
+    List<BoneWeight> weights = new List<BoneWeight>(m.weights);
+
+    // back faces: copy each used vertex once with a flipped normal, reverse the winding
+    Dictionary<int, int> back = new Dictionary<int, int>();
+    List<int> backTris = new List<int>();
+    for (int i = 0; i < blended.Count; i += 3)
+    {
+      int[] ids = new int[3];
+      for (int k = 0; k < 3; k++)
+      {
+        int v = blended[i + k];
+        if (!back.ContainsKey(v))
+        {
+          back[v] = verts.Count;
+          verts.Add(m.verts[v]);
+          normals.Add(-m.normals[v]);
+          uvs.Add(m.uvs[v]);
+          weights.Add(m.weights[v]);
+        }
+        ids[k] = back[v];
+      }
+      backTris.Add(ids[0]);
+      backTris.Add(ids[2]);
+      backTris.Add(ids[1]);
+    }
+    blended.AddRange(backTris);
+
+    m.mesh = new Mesh();
+    m.mesh.hideFlags = HideFlags.HideAndDontSave;
+    m.mesh.vertices = verts.ToArray();
+    m.mesh.normals = normals.ToArray();
+    m.mesh.uv = uvs.ToArray();
+    m.mesh.boneWeights = weights.ToArray();
+    m.mesh.bindposes = m.bind;
+    m.mesh.subMeshCount = 2;
+    m.mesh.SetTriangles(opaque.ToArray(), 0);
+    m.mesh.SetTriangles(blended.ToArray(), 1);
+    m.mesh.RecalculateBounds();
   }
 
   // ---------------------------------------------------------------- skin file
@@ -241,13 +313,12 @@ public static class CustomModel
       bind[i] = Matrix4x4.TRS(-m.bonePos[i], Quaternion.identity, Vector3.one);
 
     m.mesh = new Mesh();
-    m.mesh.hideFlags = HideFlags.HideAndDontSave;
-    m.mesh.vertices = verts.ToArray();
-    m.mesh.normals = normals.ToArray();
-    m.mesh.uv = uvs.ToArray();
-    m.mesh.boneWeights = weights.ToArray();
-    m.mesh.bindposes = bind;
-    m.mesh.triangles = tris.ToArray();
+    m.verts = verts.ToArray();
+    m.normals = normals.ToArray();
+    m.uvs = uvs.ToArray();
+    m.weights = weights.ToArray();
+    m.tris = tris.ToArray();
+    m.bind = bind;
     m.mesh.RecalculateBounds();
   }
 
@@ -468,16 +539,20 @@ public static class CustomModel
       bt[i].localScale = Vector3.one;
     }
 
-    Material mat = new Material(Shader.Find("Diffuse"));
-    mat.mainTexture = tex;
-    mat.color = Color.white;
+    Material opaqueMat = new Material(Shader.Find("Diffuse"));
+    opaqueMat.mainTexture = tex;
+    opaqueMat.color = Color.white;
+
+    Material blendMat = new Material(Shader.Find("Transparent/Diffuse"));
+    blendMat.mainTexture = tex;
+    blendMat.color = Color.white;
 
     SkinnedMeshRenderer smr = root.AddComponent<SkinnedMeshRenderer>();
     smr.sharedMesh = m.mesh;
     smr.bones = bt;
     smr.quality = SkinQuality.Bone4;
     smr.updateWhenOffscreen = true;
-    smr.sharedMaterial = mat;
+    smr.sharedMaterials = new Material[] { opaqueMat, blendMat };
 
     Animation anim = root.AddComponent<Animation>();
     anim.cullingType = AnimationCullingType.AlwaysAnimate;
