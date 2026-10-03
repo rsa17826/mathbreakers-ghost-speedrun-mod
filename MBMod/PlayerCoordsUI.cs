@@ -245,8 +245,7 @@ public class PlayerCoordsUI : MonoBehaviour
           Application.LoadLevel(MBMod.currentMode);
           File.Create("levelWasReset").Close();
         }
-        string sign = delta >= 0 ? "+" : "";
-        string deltaText = string.Format("Best Run: {0}{1:F2}s", sign, delta);
+        string deltaText = string.Format("Best Run: {0:+0.00;-0.00;0.00}s", delta);
         Color deltaColor = delta <= 0 ? AheadColor : BehindColor;
         DrawText(new Rect(_windowRect.x + 10, _windowRect.y + 56, 220, 20), deltaText, deltaColor);
       }
