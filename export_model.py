@@ -58,7 +58,7 @@ OUT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 SKIN_OUT = os.path.join(OUT_DIR, "player.skin")
 PNG_OUT = os.path.join(OUT_DIR, "player.png")
-
+EMISSION_OUT = os.path.join(OUT_DIR, "player_emission.png")
 ATLAS_SIZE = 2048
 
 # Pixels of padding around UV islands.
@@ -309,7 +309,22 @@ else:
 if atlas is None:
   atlas = bpy.data.images.new(name="PLAYER_ALBEDO_ATLAS", width=ATLAS_SIZE, height=ATLAS_SIZE, alpha=True)
 
-atlas.alpha_mode = "STRAIGHT"
+if "PLAYER_EMISSION_ATLAS" in bpy.data.images:
+  emission_atlas = bpy.data.images["PLAYER_EMISSION_ATLAS"]
+
+  # Do not reuse an image of the wrong size.
+  if emission_atlas.size[0] != ATLAS_SIZE or emission_atlas.size[1] != ATLAS_SIZE:
+    bpy.data.images.remove(emission_atlas)
+    emission_atlas = None
+
+else:
+  emission_atlas = None
+
+
+if emission_atlas is None:
+  emission_atlas = bpy.data.images.new(name="PLAYER_EMISSION_ATLAS", width=ATLAS_SIZE, height=ATLAS_SIZE, alpha=True)
+
+emission_atlas.alpha_mode = "STRAIGHT"
 
 alpha_atlas = bpy.data.images.new(name="PLAYER_ALPHA_ATLAS", width=ATLAS_SIZE, height=ATLAS_SIZE, alpha=False)
 alpha_atlas.colorspace_settings.name = "Non-Color"
@@ -369,6 +384,7 @@ for obj in duplicates:
         "alpha_source": alpha_input.links[0].from_socket if alpha_input.links else None,
         "alpha_default": alpha_input.default_value,
         "target": node,
+        "principled": principled,
       }
     )
 
@@ -457,6 +473,36 @@ alpha_atlas.pixels.foreach_get(alpha_px)
 
 color_px[3::4] = alpha_px[0::4]
 atlas.pixels.foreach_set(color_px)
+print("Baking emission...")
+
+for r in rewired:
+  p = r["principled"]
+  emit = r["emit"]
+  tree = r["tree"]
+
+  color_in = p.inputs["Emission Color"] if "Emission Color" in p.inputs else p.inputs["Emission"]
+  strength_in = p.inputs["Emission Strength"]
+
+  if strength_in.links:
+    raise Exception("material %s: Emission Strength is linked, unsupported" % r["tree"].name)
+
+  for link in list(emit.inputs["Color"].links):
+    tree.links.remove(link)
+
+  if color_in.links:
+    tree.links.new(color_in.links[0].from_socket, emit.inputs["Color"])
+  else:
+    emit.inputs["Color"].default_value = color_in.default_value
+
+  emit.inputs["Strength"].default_value = strength_in.default_value
+  r["target"].image = emission_atlas
+
+bpy.ops.object.bake(type="EMIT", use_clear=True, margin=BAKE_MARGIN_PIXELS, target="IMAGE_TEXTURES", uv_layer=ATLAS_UV_NAME)
+
+emission_atlas.filepath_raw = os.path.abspath(EMISSION_OUT)
+emission_atlas.file_format = "PNG"
+emission_atlas.save()
+print("Wrote player_emission.png")
 # ============================================================
 # SAVE PLAYER.PNG
 # ============================================================

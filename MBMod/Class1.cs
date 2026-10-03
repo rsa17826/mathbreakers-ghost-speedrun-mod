@@ -112,12 +112,12 @@ public class MBMod : BaseUnityPlugin
     invertShift = File.Exists("invertShift");
     if (File.Exists("player.skin"))
     {
-      CustomModel.Load("player.skin", "player.anim", "player.png");
+      CustomModel.Load("player.skin", "player.anim", "player.png", "player_emission.png");
     }
     if (File.Exists("clone.skin") || File.Exists("clone.anim"))
     {
       // a separate ghost model needs all three files; a missing one throws with its name
-      CustomModel.LoadGhost("clone.skin", "clone.anim", "clone.png");
+      CustomModel.LoadGhost("clone.skin", "clone.anim", "clone.png", "clone_emission.png");
     }
     else if (File.Exists("clone.png"))
     {

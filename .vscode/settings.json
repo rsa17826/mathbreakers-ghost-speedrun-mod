@@ -3,7 +3,7 @@
     "**/*.dat": true,
     "**/level*": true,
     "**/*.assets": true,
-    "**/*.png": true,
+    // "**/*.png": true,
     "**/*doorstop*": true,
     "**/*.exe": true,
     "**/*.desktop": true,

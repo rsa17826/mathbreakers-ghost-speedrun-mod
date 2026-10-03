@@ -79,21 +79,26 @@ public static class CustomModel
     public BoneWeight[] weights;
     public int[] tris;
     public Matrix4x4[] bind;
+    public Texture2D emissionTex;
   }
 
   static Model playerModel;
   static Model ghostModel; // null unless clone.skin/.anim/.png were loaded
 
-  public static void Load(string skinPath, string animPath, string texPath)
+  public static void Load(string skinPath, string animPath, string texPath, string emissionPath)
   {
-    playerModel = LoadModel(skinPath, animPath, texPath);
+    playerModel = LoadModel(skinPath, animPath, texPath, emissionPath);
     enabled = true;
   }
 
-  // Separate model for the ghost. Needs all three files.
-  public static void LoadGhost(string skinPath, string animPath, string texPath)
+  public static void LoadGhost(
+    string skinPath,
+    string animPath,
+    string texPath,
+    string emissionPath
+  )
   {
-    ghostModel = LoadModel(skinPath, animPath, texPath);
+    ghostModel = LoadModel(skinPath, animPath, texPath, emissionPath);
   }
 
   // Only a different texture for the ghost
@@ -102,7 +107,7 @@ public static class CustomModel
     ghostTexture = LoadTexture(texPath);
   }
 
-  static Model LoadModel(string skinPath, string animPath, string texPath)
+  static Model LoadModel(string skinPath, string animPath, string texPath, string emissionPath)
   {
     Model m = new Model();
     LoadSkin(m, skinPath);
@@ -116,6 +121,7 @@ public static class CustomModel
         throw new Exception(animPath + " has no clip named '" + name + "'");
     }
     m.tex = LoadTexture(texPath);
+    m.emissionTex = LoadTexture(emissionPath);
     BuildMesh(m);
     return m;
   }
@@ -149,6 +155,9 @@ public static class CustomModel
       target.Add(b);
       target.Add(c);
     }
+
+    List<int> glow = new List<int>(opaque);
+    glow.AddRange(blended);
 
     List<Vector3> verts = new List<Vector3>(m.verts);
     List<Vector3> normals = new List<Vector3>(m.normals);
@@ -187,9 +196,10 @@ public static class CustomModel
     m.mesh.uv = uvs.ToArray();
     m.mesh.boneWeights = weights.ToArray();
     m.mesh.bindposes = m.bind;
-    m.mesh.subMeshCount = 2;
+    m.mesh.subMeshCount = 3;
     m.mesh.SetTriangles(opaque.ToArray(), 0);
     m.mesh.SetTriangles(blended.ToArray(), 1);
+    m.mesh.SetTriangles(glow.ToArray(), 2);
     m.mesh.RecalculateBounds();
   }
 
@@ -546,13 +556,16 @@ public static class CustomModel
     Material blendMat = new Material(Shader.Find("Transparent/Diffuse"));
     blendMat.mainTexture = tex;
     blendMat.color = Color.white;
+    Material glowMat = new Material(Shader.Find("Particles/Additive"));
+    glowMat.mainTexture = m.emissionTex;
+    glowMat.SetColor("_TintColor", new Color(0.5f, 0.5f, 0.5f, 0.5f));
 
     SkinnedMeshRenderer smr = root.AddComponent<SkinnedMeshRenderer>();
     smr.sharedMesh = m.mesh;
     smr.bones = bt;
     smr.quality = SkinQuality.Bone4;
     smr.updateWhenOffscreen = true;
-    smr.sharedMaterials = new Material[] { opaqueMat, blendMat };
+    smr.sharedMaterials = new Material[] { opaqueMat, blendMat, glowMat };
 
     Animation anim = root.AddComponent<Animation>();
     anim.cullingType = AnimationCullingType.AlwaysAnimate;
