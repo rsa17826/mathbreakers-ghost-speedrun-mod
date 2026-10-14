@@ -27,7 +27,6 @@ public class MBMod : BaseUnityPlugin
   private FileSystemWatcher watcher;
   private static string watchPath;
   public static float lastRestartTime;
-  static string[] shaderNames;
   static int shaderIdx = -1;
   static List<Renderer> hidden = new List<Renderer>();
 
@@ -46,7 +45,9 @@ public class MBMod : BaseUnityPlugin
     Log.LogInfo("================================");
 
     var harmony = new Harmony("nyix.mathbreakers.gsr");
-
+    var ballUiObj = new GameObject("BallDetectorUI");
+    UnityEngine.Object.DontDestroyOnLoad(ballUiObj);
+    ballUiObj.AddComponent<BallDetectorUI>();
     var uiObj2 = new GameObject("PlayerCoordsUI");
     UnityEngine.Object.DontDestroyOnLoad(uiObj2);
     var ui2 = uiObj2.AddComponent<PlayerCoordsUI>();
